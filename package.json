@@ -38,6 +38,8 @@
   },
   "devDependencies": {
     "concurrently": "^8.2.2",
+    "vibe-kanban-web-companion": "^0.0.5",
+    "react": "^18.0",
     "vite": "^6.3.5"
   },
   "engines": {
