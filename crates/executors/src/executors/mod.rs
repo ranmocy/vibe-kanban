@@ -50,6 +50,9 @@ pub struct SlashCommandDescription {
     pub description: Option<String>,
 }
 
+/// Message template instructing agents to commit changes with a short single-line message
+pub const GIT_COMMIT_INSTRUCTION: &str = "Please stage and commit them now with a short, single-line commit message that summarizes the changes.";
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, TS)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 #[ts(use_ts_enum)]
