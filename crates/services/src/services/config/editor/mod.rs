@@ -144,6 +144,9 @@ impl EditorConfig {
     }
 
     fn ensure_extension_recommended(path: &Path) {
+        // Disable this
+        return;
+
         if !path.is_dir() {
             return;
         }
