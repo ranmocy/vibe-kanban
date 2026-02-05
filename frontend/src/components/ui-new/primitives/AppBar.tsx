@@ -74,8 +74,6 @@ export function AppBar({
   onMigrate,
 }: AppBarProps) {
   const { t } = useTranslation('common');
-  const { data: onlineCount } = useDiscordOnlineCount();
-  const { data: starCount } = useGitHubStars();
 
   return (
     <div
@@ -212,27 +210,6 @@ export function AppBar({
           selectedOrgId={selectedOrgId}
           onOrgSelect={onOrgSelect}
           onCreateOrg={onCreateOrg}
-        />
-        <AppBarSocialLink
-          href="https://github.com/BloopAI/vibe-kanban"
-          label="Star on GitHub"
-          iconPath={siGithub.path}
-          badge={
-            starCount != null && (
-              <>
-                <StarIcon size={10} weight="fill" />
-                {formatStarCount(starCount)}
-              </>
-            )
-          }
-        />
-        <AppBarSocialLink
-          href="https://discord.gg/AC4nwVtJM3"
-          label="Join our Discord"
-          iconPath={siDiscord.path}
-          badge={
-            onlineCount != null && (onlineCount > 999 ? '999+' : onlineCount)
-          }
         />
       </div>
     </div>

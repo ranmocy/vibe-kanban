@@ -56,11 +56,6 @@ const EXTERNAL_LINKS = [
     icon: MessageCircleQuestion,
     href: 'https://github.com/BloopAI/vibe-kanban/issues',
   },
-  {
-    label: 'Discord',
-    icon: MessageCircle,
-    href: 'https://discord.gg/AC4nwVtJM3',
-  },
 ];
 
 function NavDivider() {
