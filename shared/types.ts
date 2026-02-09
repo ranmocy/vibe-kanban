@@ -306,6 +306,10 @@ export type CreateAndStartTaskRequest = { task: CreateTask, executor_profile_id:
 
 export type CreatePrApiRequest = { title: string, body: string | null, target_branch: string | null, draft: boolean | null, repo_id: string, auto_generate_description: boolean, };
 
+export type GeneratePrContentRequest = { repo_id: string, };
+
+export type GeneratePrContentResponse = { title: string, body: string, };
+
 export type ImageResponse = { id: string, file_path: string, original_name: string, mime_type: string | null, size_bytes: bigint, hash: string, created_at: string, updated_at: string, };
 
 export type ImageMetadata = { exists: boolean, file_name: string | null, path: string | null, size_bytes: bigint | null, format: string | null, proxy_url: string | null, };

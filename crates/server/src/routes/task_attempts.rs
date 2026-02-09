@@ -1954,6 +1954,7 @@ pub fn router(deployment: &DeploymentImpl) -> Router<DeploymentImpl> {
                 .route("/rebase/continue", post(continue_rebase_task_attempt))
                 .route("/conflicts/abort", post(abort_conflicts_task_attempt))
                 .route("/pr", post(pr::create_pr))
+                .route("/pr/generate", post(pr::generate_pr_content))
                 .route("/pr/attach", post(pr::attach_existing_pr))
                 .route("/pr/comments", get(pr::get_pr_comments))
                 .route("/open-editor", post(open_task_attempt_in_editor))

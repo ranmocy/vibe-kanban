@@ -8,6 +8,8 @@ import {
   ResetProcessRequest,
   EditorType,
   CreatePrApiRequest,
+  GeneratePrContentRequest,
+  GeneratePrContentResponse,
   CreateTask,
   CreateAndStartTaskRequest,
   CreateTaskAttemptBody,
@@ -697,6 +699,22 @@ export const attemptsApi = {
       body: JSON.stringify(data),
     });
     return handleApiResponseAsResult<string, PrError>(response);
+  },
+
+  generatePrContent: async (
+    attemptId: string,
+    data: GeneratePrContentRequest
+  ): Promise<Result<GeneratePrContentResponse, PrError>> => {
+    const response = await makeRequest(
+      `/api/task-attempts/${attemptId}/pr/generate`,
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }
+    );
+    return handleApiResponseAsResult<GeneratePrContentResponse, PrError>(
+      response
+    );
   },
 
   startDevServer: async (attemptId: string): Promise<ExecutionProcess[]> => {

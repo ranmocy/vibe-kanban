@@ -8,7 +8,7 @@ use axum::{
 };
 use db::models::{
     coding_agent_turn::CodingAgentTurn,
-    execution_process::{ExecutionProcess, ExecutionProcessRunReason},
+    execution_process::{ExecutionProcess, ExecutionProcessError, ExecutionProcessRunReason, ExecutionProcessStatus},
     merge::{Merge, MergeStatus},
     project_repo::ProjectRepo,
     repo::{Repo, RepoError},
@@ -92,6 +92,17 @@ pub enum GetPrCommentsError {
 #[derive(Debug, Deserialize, TS)]
 pub struct GetPrCommentsQuery {
     pub repo_id: Uuid,
+}
+
+#[derive(Debug, Deserialize, Serialize, TS)]
+pub struct GeneratePrContentRequest {
+    pub repo_id: Uuid,
+}
+
+#[derive(Debug, Serialize, TS)]
+pub struct GeneratePrContentResponse {
+    pub title: String,
+    pub body: String,
 }
 
 async fn trigger_pr_description_follow_up(
@@ -181,6 +192,226 @@ async fn trigger_pr_description_follow_up(
         .await?;
 
     Ok(())
+}
+
+async fn generate_pr_content_with_ai(
+    deployment: &DeploymentImpl,
+    workspace: &Workspace,
+    _repo_id: Uuid,
+) -> Result<(String, String), ApiError> {
+    let pool = &deployment.db().pool;
+
+    let task = workspace
+        .parent_task(pool)
+        .await?
+        .ok_or(ApiError::Workspace(WorkspaceError::TaskNotFound))?;
+
+    // Get the custom prompt from config, or use a modified default
+    let config = deployment.config().read().await;
+    let base_prompt = config
+        .pr_auto_description_prompt
+        .as_deref()
+        .unwrap_or(DEFAULT_PR_DESCRIPTION_PROMPT);
+
+    // Modify the prompt for pre-generation (no PR number/URL yet)
+    let prompt = base_prompt
+        .replace(
+            "Update the PR that was just created with a better title and description.\nThe PR number is #{pr_number} and the URL is {pr_url}.",
+            "Generate a title and description for a pull request."
+        )
+        .replace("{pr_number}", "")
+        .replace("{pr_url}", "");
+
+    let enhanced_prompt = format!(
+        r#"{}
+
+Format your response EXACTLY as follows (including the markers):
+TITLE: <your concise PR title here>
+BODY:
+<your detailed PR description here>"#,
+        prompt.trim()
+    );
+
+    drop(config); // Release the lock
+
+    // Get or create a session for this follow-up
+    let session =
+        match Session::find_latest_by_workspace_id(&deployment.db().pool, workspace.id).await? {
+            Some(s) => s,
+            None => {
+                Session::create(
+                    &deployment.db().pool,
+                    &CreateSession { executor: None },
+                    Uuid::new_v4(),
+                    workspace.id,
+                )
+                .await?
+            }
+        };
+
+    // Get executor profile from the latest coding agent process in this session
+    let Some(executor_profile_id) =
+        ExecutionProcess::latest_executor_profile_for_session(&deployment.db().pool, session.id)
+            .await?
+    else {
+        tracing::warn!(
+            "No executor profile found for session {}, cannot generate PR content with AI",
+            session.id
+        );
+        // Return task-based defaults
+        return Ok((
+            format!("{} (vibe-kanban)", task.title),
+            task.description.clone().unwrap_or_default(),
+        ));
+    };
+
+    // Get latest agent turn if one exists (for coding agent continuity)
+    let latest_session_info =
+        CodingAgentTurn::find_latest_session_info(&deployment.db().pool, session.id).await?;
+
+    let working_dir = workspace
+        .agent_working_dir
+        .as_ref()
+        .filter(|dir| !dir.is_empty())
+        .cloned();
+
+    // Build the action type (follow-up if session exists, otherwise initial)
+    let action_type = if let Some(info) = latest_session_info {
+        ExecutorActionType::CodingAgentFollowUpRequest(CodingAgentFollowUpRequest {
+            prompt: enhanced_prompt.clone(),
+            session_id: info.session_id,
+            reset_to_message_id: None,
+            executor_profile_id: executor_profile_id.clone(),
+            working_dir: working_dir.clone(),
+        })
+    } else {
+        ExecutorActionType::CodingAgentInitialRequest(CodingAgentInitialRequest {
+            prompt: enhanced_prompt.clone(),
+            executor_profile_id: executor_profile_id.clone(),
+            working_dir,
+        })
+    };
+
+    let action = ExecutorAction::new(action_type, None);
+
+    // Start execution and get the process ID
+    let execution_process = deployment
+        .container()
+        .start_execution(
+            workspace,
+            &session,
+            &action,
+            &ExecutionProcessRunReason::CodingAgent,
+        )
+        .await?;
+
+    // Poll for completion with timeout (60 seconds)
+    let timeout = std::time::Duration::from_secs(60);
+    let poll_interval = std::time::Duration::from_millis(500);
+    let start = std::time::Instant::now();
+
+    loop {
+        if start.elapsed() > timeout {
+            tracing::warn!(
+                "Timeout waiting for PR content generation (execution_process={})",
+                execution_process.id
+            );
+            return Ok((
+                format!("{} (vibe-kanban)", task.title),
+                task.description.clone().unwrap_or_default(),
+            ));
+        }
+
+        // Check execution status
+        let process = ExecutionProcess::find_by_id(pool, execution_process.id)
+            .await?
+            .ok_or(ExecutionProcessError::ExecutionProcessNotFound)?;
+
+        match process.status {
+            ExecutionProcessStatus::Completed => {
+                // Get the CodingAgentTurn to retrieve the summary
+                if let Some(turn) =
+                    CodingAgentTurn::find_by_execution_process_id(pool, execution_process.id)
+                        .await?
+                {
+                    if let Some(summary) = turn.summary {
+                        // Parse TITLE: and BODY: from the summary
+                        if let Some((title, body)) = parse_pr_content_from_summary(&summary) {
+                            return Ok((title, body));
+                        }
+                    }
+                }
+
+                // Fallback if no summary or parsing failed
+                tracing::warn!(
+                    "PR generation completed but no valid TITLE/BODY markers found in summary"
+                );
+                return Ok((
+                    format!("{} (vibe-kanban)", task.title),
+                    task.description.clone().unwrap_or_default(),
+                ));
+            }
+            ExecutionProcessStatus::Failed | ExecutionProcessStatus::Killed => {
+                tracing::warn!(
+                    "PR generation execution failed (execution_process={}, status={:?})",
+                    execution_process.id,
+                    process.status
+                );
+                return Ok((
+                    format!("{} (vibe-kanban)", task.title),
+                    task.description.clone().unwrap_or_default(),
+                ));
+            }
+            ExecutionProcessStatus::Running => {
+                // Still running, wait and poll again
+                tokio::time::sleep(poll_interval).await;
+            }
+        }
+    }
+}
+
+/// Parse TITLE: and BODY: markers from agent summary
+fn parse_pr_content_from_summary(summary: &str) -> Option<(String, String)> {
+    let title_marker = "TITLE:";
+    let body_marker = "BODY:";
+
+    let title_start = summary.find(title_marker)?;
+    let title_content_start = title_start + title_marker.len();
+
+    // Find the end of the title (either at BODY: or end of line)
+    let title_end = summary[title_content_start..]
+        .find(body_marker)
+        .map(|pos| title_content_start + pos)
+        .or_else(|| {
+            summary[title_content_start..]
+                .find('\n')
+                .map(|pos| title_content_start + pos)
+        })
+        .unwrap_or(summary.len());
+
+    let title = summary[title_content_start..title_end].trim().to_string();
+
+    // Find body content after BODY: marker
+    let body = if let Some(body_start) = summary.find(body_marker) {
+        let body_content_start = body_start + body_marker.len();
+        summary[body_content_start..].trim().to_string()
+    } else {
+        String::new()
+    };
+
+    Some((title, body))
+}
+
+pub async fn generate_pr_content(
+    Extension(workspace): Extension<Workspace>,
+    State(deployment): State<DeploymentImpl>,
+    Json(request): Json<GeneratePrContentRequest>,
+) -> Result<ResponseJson<ApiResponse<GeneratePrContentResponse, PrError>>, ApiError> {
+    let (title, body) = generate_pr_content_with_ai(&deployment, &workspace, request.repo_id).await?;
+
+    Ok(ResponseJson(ApiResponse::success(
+        GeneratePrContentResponse { title, body },
+    )))
 }
 
 pub async fn create_pr(
