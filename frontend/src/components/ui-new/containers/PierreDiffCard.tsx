@@ -36,6 +36,8 @@ import { GitHubCommentRenderer } from './GitHubCommentRenderer';
 import { CommentWidgetLine } from './CommentWidgetLine';
 import { DisplayTruncatedPath } from '@/utils/TruncatePath';
 import { stripLineEnding, splitLines } from '@/utils/string';
+import { useDeferredRender } from '@/hooks/useDeferredRender';
+import { estimateDiffHeight } from '@/utils/diffHeightEstimate';
 import type { Diff } from 'shared/types';
 import { RangeHighlightOverlay } from '@/components/diff/RangeHighlightOverlay';
 
@@ -593,7 +595,20 @@ export function PierreDiffCard({
   const [forceExpanded, setForceExpanded] = useState(false);
   const totalLines = additions + deletions;
   const isLargeDiff = totalLines > LARGE_DIFF_THRESHOLD;
-  const shouldShowPlaceholder = expanded && isLargeDiff && !forceExpanded;
+  const shouldShowLargeDiffPlaceholder =
+    expanded && isLargeDiff && !forceExpanded;
+
+  // Defer mounting of FileDiff to stagger heavy renders across idle callbacks.
+  // Only defer when expanded and not blocked by the large-diff placeholder.
+  const contentReady = useDeferredRender(
+    expanded && !shouldShowLargeDiffPlaceholder
+  );
+
+  // Estimated height for the loading placeholder to prevent layout shift
+  const placeholderHeight = useMemo(
+    () => estimateDiffHeight(diff, true),
+    [diff]
+  );
 
   return (
     <div className={cn('pb-base rounded-sm', className)}>
@@ -675,7 +690,7 @@ export function PierreDiffCard({
 
       {expanded && (
         <div className="bg-primary rounded-b-sm overflow-hidden">
-          {shouldShowPlaceholder ? (
+          {shouldShowLargeDiffPlaceholder ? (
             <div className="p-base bg-warning/5 border-t border-warning/20">
               <div className="flex items-center justify-between gap-base">
                 <div className="text-sm text-low">
@@ -706,6 +721,11 @@ export function PierreDiffCard({
                 {t('diff.largeDiff.warning')}
               </p>
             </div>
+          ) : !contentReady ? (
+            <div
+              className="animate-pulse bg-secondary/50"
+              style={{ height: placeholderHeight }}
+            />
           ) : (
             <div
               ref={diffWrapperRef}

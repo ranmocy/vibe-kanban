@@ -10,6 +10,7 @@ import type { Diff, DiffChangeKind } from 'shared/types';
 import type { ReviewComment } from '@/contexts/ReviewProvider';
 import type { NormalizedGitHubComment } from '@/hooks/useGitHubComments';
 import { DiffSide } from '@/types/diff';
+import { getCachedDiffMetadata, setCachedDiffMetadata } from './diffCache';
 
 /**
  * Discriminated union type for comment annotations.
@@ -103,37 +104,49 @@ export function transformDiffToFileDiffMetadata(
     };
   }
 
+  const changeType = mapChangeKindToChangeType(
+    diff.change,
+    diff.oldContent,
+    diff.newContent
+  );
+  const prevName =
+    diff.oldPath !== diff.newPath ? (diff.oldPath ?? undefined) : undefined;
+
+  const oldStr = diff.oldContent ?? '';
+  const newStr = diff.newContent ?? '';
+  const ignoreWS = options?.ignoreWhitespace ?? false;
+
+  // Check cache before running the diff algorithm
+  const cached = getCachedDiffMetadata(oldStr, newStr, ignoreWS);
+  if (cached) {
+    return { ...cached, type: changeType, prevName };
+  }
+
   // Prepare file contents for parseDiffFromFile
   const oldFile: FileContents = {
     name: diff.oldPath ?? filePath,
-    contents: diff.oldContent ?? '',
+    contents: oldStr,
   };
 
   const newFile: FileContents = {
     name: filePath,
-    contents: diff.newContent ?? '',
+    contents: newStr,
   };
 
   // Use pierre/diffs parser to generate diff metadata
   const metadata = parseDiffFromFile(
     oldFile,
     newFile,
-    options?.ignoreWhitespace ? { ignoreWhitespace: true } : undefined
+    ignoreWS ? { ignoreWhitespace: true } : undefined
   );
 
-  // Override the type based on our DiffChangeKind mapping
-  // parseDiffFromFile may not correctly detect renames/copies
-  const changeType = mapChangeKindToChangeType(
-    diff.change,
-    diff.oldContent,
-    diff.newContent
-  );
+  // Cache the result for future lookups
+  setCachedDiffMetadata(oldStr, newStr, ignoreWS, metadata);
 
   return {
     ...metadata,
     type: changeType,
-    prevName:
-      diff.oldPath !== diff.newPath ? (diff.oldPath ?? undefined) : undefined,
+    prevName,
   };
 }
 
