@@ -54,7 +54,7 @@ import { EditorState, type LexicalEditor } from 'lexical';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Check, Clipboard, Pencil, Trash2 } from 'lucide-react';
+import { ArrowUpToLine, Check, Clipboard, Pencil, Trash2 } from 'lucide-react';
 import { writeClipboardViaBridge } from '@/vscode/bridge';
 import type { SendMessageShortcut } from 'shared/types';
 import type { BaseCodingAgent } from 'shared/types';
@@ -155,6 +155,9 @@ const WYSIWYGEditor = forwardRef<WYSIWYGEditorRef, WysiwygProps>(
   ) {
     // Ref to capture the Lexical editor instance for imperative methods
     const editorInstanceRef = useRef<LexicalEditor | null>(null);
+
+    // Ref for scroll-to-top in read-only mode
+    const wrapperRef = useRef<HTMLDivElement>(null);
 
     // Expose focus method via ref
     useImperativeHandle(ref, () => ({
@@ -369,10 +372,26 @@ const WYSIWYGEditor = forwardRef<WYSIWYGEditorRef, WysiwygProps>(
 
     // Wrap with action buttons in read-only mode
     if (disabled) {
+      const handleScrollToTop = () => {
+        wrapperRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      };
+
       return (
-        <div className="relative group">
+        <div ref={wrapperRef} className="relative group">
           <div className="sticky top-0 right-2 z-10 pointer-events-none h-0">
             <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+              {/* Scroll to top of message */}
+              <Button
+                type="button"
+                aria-label="Scroll to top"
+                title="Scroll to top"
+                variant="icon"
+                size="icon"
+                onClick={handleScrollToTop}
+                className="pointer-events-auto p-2 bg-muted h-8 w-8"
+              >
+                <ArrowUpToLine className="w-4 h-4 text-muted-foreground" />
+              </Button>
               {/* Copy button */}
               <Button
                 type="button"
