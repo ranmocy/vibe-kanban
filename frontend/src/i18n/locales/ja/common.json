@@ -398,12 +398,10 @@
   },
   "createMode": {
     "headings": {
-      "repoStep": "どのリポジトリで作業しますか？",
       "chatStep": "何に取り組みますか？"
     },
     "repoPicker": {
       "actions": {
-        "recent": "最近",
         "browse": "参照",
         "create": "作成"
       }

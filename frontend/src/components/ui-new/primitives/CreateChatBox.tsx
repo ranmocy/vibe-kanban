@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, type ReactNode } from 'react';
 import {
   CheckIcon,
   GearIcon,
@@ -7,7 +7,6 @@ import {
   XIcon,
 } from '@phosphor-icons/react';
 import { useTranslation } from 'react-i18next';
-import { cn } from '@/lib/utils';
 import { toPrettyCase } from '@/utils/string';
 import type { BaseCodingAgent } from 'shared/types';
 import type { LocalImageMetadata } from '@/components/ui/wysiwyg/context/task-attempt-context';
@@ -65,9 +64,7 @@ interface CreateChatBoxProps {
   onPasteFiles?: (files: File[]) => void;
   localImages?: LocalImageMetadata[];
   dropzone?: DropzoneProps;
-  onEditRepos: () => void;
-  repoSummaryLabel: string;
-  repoSummaryTitle: string;
+  repoPickerSlot?: ReactNode;
   linkedIssue?: LinkedIssueBadgeProps | null;
 }
 
@@ -91,9 +88,7 @@ export function CreateChatBox({
   onPasteFiles,
   localImages,
   dropzone,
-  onEditRepos,
-  repoSummaryLabel,
-  repoSummaryTitle,
+  repoPickerSlot,
   linkedIssue,
 }: CreateChatBoxProps) {
   const { t } = useTranslation(['common', 'tasks']);
@@ -158,9 +153,9 @@ export function CreateChatBox({
         </div>
       )}
 
-      <div className="rounded-sm border border-border bg-secondary px-plusfifty py-base">
-        <div className="flex items-end gap-base">
-          <div className="min-w-0 flex-1 py-half overflow-hidden">
+      <div className="rounded-sm border border-border bg-secondary px-plusfifty">
+        <div className="flex items-center gap-base">
+          <div className="min-w-0 flex-1 py-3 pl-2 overflow-hidden">
             <WYSIWYGEditor
               placeholder="Describe what you'd like the agent to work on..."
               value={editor.value}
@@ -187,6 +182,7 @@ export function CreateChatBox({
             className="shrink-0 py-half"
           />
         </div>
+        {repoPickerSlot}
       </div>
 
       <div className="flex items-start justify-between gap-base">
@@ -287,24 +283,6 @@ export function CreateChatBox({
               </div>
             </>
           )}
-
-          <span
-            className="mx-half h-3 w-px shrink-0 bg-border/70"
-            aria-hidden="true"
-          />
-
-          <button
-            type="button"
-            onClick={onEditRepos}
-            title={repoSummaryTitle}
-            disabled={isDisabled}
-            className={cn(
-              'max-w-[320px] shrink-0 bg-transparent px-base py-0 text-sm text-normal hover:text-high',
-              'disabled:cursor-not-allowed disabled:opacity-50'
-            )}
-          >
-            <span className="block truncate">{repoSummaryLabel}</span>
-          </button>
 
           {linkedIssue && (
             <>

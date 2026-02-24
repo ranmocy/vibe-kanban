@@ -398,12 +398,10 @@
   },
   "createMode": {
     "headings": {
-      "repoStep": "¿En qué repositorios te gustaría trabajar?",
       "chatStep": "¿En qué te gustaría trabajar?"
     },
     "repoPicker": {
       "actions": {
-        "recent": "Recientes",
         "browse": "Explorar",
         "create": "Crear"
       }
