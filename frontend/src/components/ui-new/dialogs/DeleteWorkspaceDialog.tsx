@@ -30,7 +30,7 @@ const DeleteWorkspaceDialogImpl = NiceModal.create<DeleteWorkspaceDialogProps>(
   ({ workspaceId, branchName }) => {
     const modal = useModal();
     const { t } = useTranslation();
-    const [deleteBranches, setDeleteBranches] = useState(false);
+    const [deleteBranches, setDeleteBranches] = useState(true);
 
     // Check if branch deletion is safe by looking for open PRs
     const { data: branchStatus } = useBranchStatus(workspaceId);
