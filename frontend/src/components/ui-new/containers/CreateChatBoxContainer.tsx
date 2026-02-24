@@ -64,6 +64,8 @@ export function CreateChatBoxContainer({
     hasInitialValue,
     linkedIssue,
     clearLinkedIssue,
+    workspaceName,
+    setWorkspaceName,
   } = useCreateMode();
 
   const { createWorkspace } = useCreateWorkspace({
@@ -368,6 +370,7 @@ export function CreateChatBoxContainer({
           target_branch: targetBranches[r.id] ?? 'main',
         })),
       },
+      workspaceName: workspaceName.trim() || undefined,
       linkToIssue: linkedIssue
         ? {
             remoteProjectId: linkedIssue.remoteProjectId,
@@ -394,6 +397,7 @@ export function CreateChatBoxContainer({
     hasChangedFromDefault,
     updateAndSaveConfig,
     linkedIssue,
+    workspaceName,
   ]);
 
   // Determine error to display
@@ -471,6 +475,10 @@ export function CreateChatBoxContainer({
               onPasteFiles={uploadFiles}
               localImages={localImages}
               dropzone={{ getRootProps, getInputProps, isDragActive }}
+              workspaceName={{
+                value: workspaceName,
+                onChange: setWorkspaceName,
+              }}
               repoPickerSlot={
                 <InlineRepoPicker
                   recentRepos={recentRepos ?? []}

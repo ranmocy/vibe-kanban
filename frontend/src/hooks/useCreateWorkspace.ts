@@ -8,6 +8,7 @@ import type { CreateAndStartTaskRequest } from 'shared/types';
 
 interface CreateWorkspaceParams {
   data: CreateAndStartTaskRequest;
+  workspaceName?: string;
   linkToIssue?: {
     remoteProjectId: string;
     issueId: string;
@@ -24,10 +25,15 @@ export function useCreateWorkspace(options: UseCreateWorkspaceOptions = {}) {
   const navigate = useNavigate();
 
   const createWorkspace = useMutation({
-    mutationFn: async ({ data, linkToIssue }: CreateWorkspaceParams) => {
+    mutationFn: async ({ data, workspaceName, linkToIssue }: CreateWorkspaceParams) => {
       const task = await tasksApi.createAndStart(data);
       const workspaces = await attemptsApi.getAll(task.id);
       const workspaceId = workspaces[0]?.id;
+
+      // Set custom workspace name if provided
+      if (workspaceName?.trim() && workspaceId) {
+        await attemptsApi.update(workspaceId, { name: workspaceName.trim() });
+      }
 
       // Link to issue if requested
       if (linkToIssue && workspaceId) {

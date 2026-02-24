@@ -51,6 +51,7 @@ interface DraftState {
   repos: SelectedRepo[];
   profile: ExecutorProfileId | null;
   message: string;
+  workspaceName: string;
   linkedIssue: LinkedIssue | null;
 }
 
@@ -66,6 +67,7 @@ type DraftAction =
   | { type: 'SET_TARGET_BRANCH'; repoId: string; branch: string }
   | { type: 'SET_PROFILE'; profile: ExecutorProfileId | null }
   | { type: 'SET_MESSAGE'; message: string }
+  | { type: 'SET_WORKSPACE_NAME'; workspaceName: string }
   | { type: 'CLEAR_REPOS' }
   | { type: 'CLEAR' }
   | { type: 'CLEAR_LINKED_ISSUE' }
@@ -82,6 +84,7 @@ const draftInitialState: DraftState = {
   repos: [],
   profile: null,
   message: '',
+  workspaceName: '',
   linkedIssue: null,
 };
 
@@ -141,6 +144,9 @@ function draftReducer(state: DraftState, action: DraftAction): DraftState {
     case 'SET_MESSAGE':
       return { ...state, message: action.message };
 
+    case 'SET_WORKSPACE_NAME':
+      return { ...state, workspaceName: action.workspaceName };
+
     case 'CLEAR_REPOS':
       return { ...state, repos: [] };
 
@@ -190,6 +196,7 @@ interface UseCreateModeStateResult {
   targetBranches: Record<string, string | null>;
   selectedProfile: ExecutorProfileId | null;
   message: string;
+  workspaceName: string;
   isLoading: boolean;
   hasInitialValue: boolean;
   linkedIssue: LinkedIssue | null;
@@ -197,6 +204,7 @@ interface UseCreateModeStateResult {
   // Actions
   setSelectedProjectId: (id: string | null) => void;
   setMessage: (message: string) => void;
+  setWorkspaceName: (name: string) => void;
   setSelectedProfile: (profile: ExecutorProfileId | null) => void;
   addRepo: (repo: Repo) => void;
   removeRepo: (repoId: string) => void;
@@ -465,6 +473,10 @@ export function useCreateModeState({
     dispatch({ type: 'SET_MESSAGE', message });
   }, []);
 
+  const setWorkspaceName = useCallback((workspaceName: string) => {
+    dispatch({ type: 'SET_WORKSPACE_NAME', workspaceName });
+  }, []);
+
   const setSelectedProfile = useCallback(
     (profile: ExecutorProfileId | null) => {
       dispatch({ type: 'SET_PROFILE', profile });
@@ -508,11 +520,13 @@ export function useCreateModeState({
     targetBranches,
     selectedProfile: state.profile,
     message: state.message,
+    workspaceName: state.workspaceName,
     isLoading: scratchLoading,
     hasInitialValue: state.phase === 'ready',
     linkedIssue: state.linkedIssue,
     setSelectedProjectId,
     setMessage,
+    setWorkspaceName,
     setSelectedProfile,
     addRepo,
     removeRepo,

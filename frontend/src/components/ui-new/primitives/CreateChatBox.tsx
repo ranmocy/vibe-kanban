@@ -64,6 +64,7 @@ interface CreateChatBoxProps {
   onPasteFiles?: (files: File[]) => void;
   localImages?: LocalImageMetadata[];
   dropzone?: DropzoneProps;
+  workspaceName?: { value: string; onChange: (v: string) => void };
   repoPickerSlot?: ReactNode;
   linkedIssue?: LinkedIssueBadgeProps | null;
 }
@@ -88,6 +89,7 @@ export function CreateChatBox({
   onPasteFiles,
   localImages,
   dropzone,
+  workspaceName,
   repoPickerSlot,
   linkedIssue,
 }: CreateChatBoxProps) {
@@ -184,6 +186,17 @@ export function CreateChatBox({
         </div>
         {repoPickerSlot}
       </div>
+
+      {workspaceName && (
+        <input
+          type="text"
+          value={workspaceName.value}
+          onChange={(e) => workspaceName.onChange(e.target.value)}
+          placeholder={t('createMode.workspaceNamePlaceholder', 'Workspace name (optional)')}
+          disabled={isDisabled}
+          className="w-full rounded-sm border border-border bg-secondary px-base py-half text-sm text-high placeholder:text-low focus:border-brand focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+        />
+      )}
 
       <div className="flex items-start justify-between gap-base">
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-0">

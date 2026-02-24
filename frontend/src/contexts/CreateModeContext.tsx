@@ -31,6 +31,8 @@ interface CreateModeContextValue {
   setSelectedProfile: (profile: ExecutorProfileId | null) => void;
   message: string;
   setMessage: (message: string) => void;
+  workspaceName: string;
+  setWorkspaceName: (name: string) => void;
   clearDraft: () => Promise<void>;
   /** Whether the initial value has been applied from scratch */
   hasInitialValue: boolean;
@@ -113,6 +115,8 @@ export function CreateModeProvider({
       setSelectedProfile: state.setSelectedProfile,
       message: state.message,
       setMessage: state.setMessage,
+      workspaceName: state.workspaceName,
+      setWorkspaceName: state.setWorkspaceName,
       clearDraft: state.clearDraft,
       hasInitialValue: state.hasInitialValue,
       linkedIssue: state.linkedIssue,
@@ -131,6 +135,8 @@ export function CreateModeProvider({
       state.setSelectedProfile,
       state.message,
       state.setMessage,
+      state.workspaceName,
+      state.setWorkspaceName,
       state.clearDraft,
       state.hasInitialValue,
       state.linkedIssue,
