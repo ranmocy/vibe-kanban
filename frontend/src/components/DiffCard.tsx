@@ -1,7 +1,7 @@
 import { Diff } from 'shared/types';
 import { DiffModeEnum, DiffView, SplitSide } from '@git-diff-view/react';
 import { generateDiffFile, type DiffFile } from '@git-diff-view/file';
-import { useMemo } from 'react';
+import { useMemo, useState, useRef, useEffect } from 'react';
 import { useUserSystem } from '@/components/ConfigProvider';
 import { getHighLightLanguageFromPath } from '@/utils/extToLanguage';
 import { getActualTheme } from '@/utils/theme';
@@ -88,6 +88,31 @@ export default function DiffCard({
   const ignoreWhitespace = useIgnoreWhitespaceDiff();
   const wrapText = useWrapTextDiff();
   const { projectId } = useProject();
+
+  // Range selection state
+  const [rangeAnchor, setRangeAnchor] = useState<{
+    lineNumber: number;
+    side: DiffSide;
+  } | null>(null);
+  const isShiftHeld = useRef(false);
+
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') isShiftHeld.current = true;
+    };
+    const up = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') {
+        isShiftHeld.current = false;
+        setRangeAnchor(null);
+      }
+    };
+    document.addEventListener('keydown', down);
+    document.addEventListener('keyup', up);
+    return () => {
+      document.removeEventListener('keydown', down);
+      document.removeEventListener('keyup', up);
+    };
+  }, []);
 
   const oldName = diff.oldPath || undefined;
   const newName = diff.newPath || oldName || 'unknown';
@@ -176,16 +201,42 @@ export default function DiffCard({
 
   const handleAddWidgetClick = (lineNumber: number, side: SplitSide) => {
     const diffSide = side === SplitSide.old ? DiffSide.Old : DiffSide.New;
-    const widgetKey = `${filePath}-${diffSide}-${lineNumber}`;
-    const codeLine = readPlainLine(diffFile, lineNumber, diffSide);
-    const draft: ReviewDraft = {
-      filePath,
-      side: diffSide,
-      lineNumber,
-      text: '',
-      ...(codeLine !== undefined ? { codeLine } : {}),
-    };
-    setDraft(widgetKey, draft);
+
+    if (rangeAnchor) {
+      // Second click during tracking: finalize range
+      const startLine = Math.min(rangeAnchor.lineNumber, lineNumber);
+      const endLine = Math.max(rangeAnchor.lineNumber, lineNumber);
+      const endSide = endLine === lineNumber ? diffSide : rangeAnchor.side;
+      const widgetKey = `${filePath}-${endSide}-${endLine}`;
+      const codeLine = readPlainLine(diffFile, endLine, endSide);
+      const draft: ReviewDraft = {
+        filePath,
+        side: endSide,
+        startLineNumber: startLine,
+        lineNumber: endLine,
+        text: '',
+        ...(codeLine !== undefined ? { codeLine } : {}),
+      };
+      setDraft(widgetKey, draft);
+      setRangeAnchor(null);
+    } else if (isShiftHeld.current) {
+      // Shift-click: enter tracking mode
+      setRangeAnchor({ lineNumber, side: diffSide });
+    } else {
+      // Normal click: single-line comment
+      setRangeAnchor(null);
+      const widgetKey = `${filePath}-${diffSide}-${lineNumber}`;
+      const codeLine = readPlainLine(diffFile, lineNumber, diffSide);
+      const draft: ReviewDraft = {
+        filePath,
+        side: diffSide,
+        startLineNumber: lineNumber,
+        lineNumber,
+        text: '',
+        ...(codeLine !== undefined ? { codeLine } : {}),
+      };
+      setDraft(widgetKey, draft);
+    }
   };
 
   const renderWidgetLine = (props: {

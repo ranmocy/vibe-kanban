@@ -34,6 +34,7 @@ export const CommentWidgetLine = memo(function CommentWidgetLine({
       addComment({
         filePath: draft.filePath,
         side: draft.side,
+        startLineNumber: draft.startLineNumber,
         lineNumber: draft.lineNumber,
         text: value.trim(),
         codeLine: draft.codeLine,
@@ -43,9 +44,17 @@ export const CommentWidgetLine = memo(function CommentWidgetLine({
     onSave();
   }, [value, draft, setDraft, widgetKey, onSave, addComment]);
 
+  const rangeHeader =
+    draft.startLineNumber !== draft.lineNumber ? (
+      <span className="text-xs text-low">
+        Lines {draft.startLineNumber}-{draft.lineNumber}
+      </span>
+    ) : undefined;
+
   return (
     <CommentCard
       variant="input"
+      header={rangeHeader}
       actions={
         <>
           <PrimaryButton

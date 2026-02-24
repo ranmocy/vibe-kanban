@@ -41,6 +41,7 @@ export function CommentWidgetLine({
       addComment({
         filePath: draft.filePath,
         side: draft.side,
+        startLineNumber: draft.startLineNumber,
         lineNumber: draft.lineNumber,
         text: value.trim(),
         codeLine: draft.codeLine,
@@ -76,6 +77,11 @@ export function CommentWidgetLine({
 
   return (
     <div className="p-4 border-y bg-primary">
+      {draft.startLineNumber !== draft.lineNumber && (
+        <div className="text-xs text-muted-foreground mb-2">
+          Lines {draft.startLineNumber}-{draft.lineNumber}
+        </div>
+      )}
       <WYSIWYGEditor
         value={value}
         onChange={setValue}

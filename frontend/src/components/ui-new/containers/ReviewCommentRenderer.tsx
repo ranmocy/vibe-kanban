@@ -40,10 +40,18 @@ export const ReviewCommentRenderer = memo(function ReviewCommentRenderer({
     setIsEditing(false);
   };
 
+  const rangeHeader =
+    comment.startLineNumber !== comment.lineNumber ? (
+      <span className="text-xs text-low">
+        Lines {comment.startLineNumber}-{comment.lineNumber}
+      </span>
+    ) : undefined;
+
   if (isEditing) {
     return (
       <CommentCard
         variant="user"
+        header={rangeHeader}
         actions={
           <>
             <PrimaryButton
@@ -73,7 +81,7 @@ export const ReviewCommentRenderer = memo(function ReviewCommentRenderer({
   }
 
   return (
-    <CommentCard variant="user">
+    <CommentCard variant="user" header={rangeHeader}>
       <WYSIWYGEditor
         value={comment.text}
         disabled={true}

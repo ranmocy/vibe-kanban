@@ -6,6 +6,7 @@ import { DiffSide } from '@/types/diff';
 export interface ReviewComment {
   id: string;
   filePath: string;
+  startLineNumber: number;
   lineNumber: number;
   side: DiffSide;
   text: string;
@@ -15,6 +16,7 @@ export interface ReviewComment {
 export interface ReviewDraft {
   filePath: string;
   side: DiffSide;
+  startLineNumber: number;
   lineNumber: number;
   text: string;
   codeLine?: string;
@@ -119,14 +121,18 @@ export function ReviewProvider({
     const commentsMd = comments
       .map((comment) => {
         const codeLine = formatCodeLine(comment.codeLine);
+        const lineLabel =
+          comment.startLineNumber !== comment.lineNumber
+            ? `Lines ${comment.startLineNumber}-${comment.lineNumber}`
+            : `Line ${comment.lineNumber}`;
         // Format file paths in comment body with backticks
         const bodyWithFormattedPaths = comment.text
           .trim()
           .replace(/([/\\]?[\w.-]+(?:[/\\][\w.-]+)+)/g, '`$1`');
         if (codeLine) {
-          return `**${comment.filePath}** (Line ${comment.lineNumber})\n${codeLine}\n\n> ${bodyWithFormattedPaths}\n`;
+          return `**${comment.filePath}** (${lineLabel})\n${codeLine}\n\n> ${bodyWithFormattedPaths}\n`;
         }
-        return `**${comment.filePath}** (Line ${comment.lineNumber})\n\n> ${bodyWithFormattedPaths}\n`;
+        return `**${comment.filePath}** (${lineLabel})\n\n> ${bodyWithFormattedPaths}\n`;
       })
       .join('\n');
 

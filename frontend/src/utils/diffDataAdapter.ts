@@ -138,15 +138,17 @@ export function transformDiffToFileDiffMetadata(
 }
 
 /**
- * Creates a unique key for a comment based on file path, line number, and side.
+ * Creates a unique key for a comment based on file path, line range, and side.
  * Used for deduplication.
  */
 function createCommentKey(
   filePath: string,
   lineNumber: number,
-  side: DiffSide
+  side: DiffSide,
+  startLineNumber?: number
 ): string {
-  return `${filePath}:${lineNumber}:${side}`;
+  const start = startLineNumber ?? lineNumber;
+  return `${filePath}:${start}-${lineNumber}:${side}`;
 }
 
 /**
@@ -175,7 +177,8 @@ export function transformCommentsToAnnotations(
     const key = createCommentKey(
       comment.filePath,
       comment.lineNumber,
-      comment.side
+      comment.side,
+      comment.startLineNumber
     );
     occupiedKeys.add(key);
 

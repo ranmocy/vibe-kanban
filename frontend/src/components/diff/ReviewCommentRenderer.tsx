@@ -37,9 +37,17 @@ export function ReviewCommentRenderer({
     setIsEditing(false);
   };
 
+  const rangeHeader =
+    comment.startLineNumber !== comment.lineNumber ? (
+      <div className="text-xs text-muted-foreground mb-2">
+        Lines {comment.startLineNumber}-{comment.lineNumber}
+      </div>
+    ) : null;
+
   if (isEditing) {
     return (
       <div className="border-y bg-background p-4">
+        {rangeHeader}
         <WYSIWYGEditor
           value={editText}
           onChange={setEditText}
@@ -68,6 +76,7 @@ export function ReviewCommentRenderer({
 
   return (
     <div className="border-y bg-background p-4">
+      {rangeHeader}
       <WYSIWYGEditor
         value={comment.text}
         disabled={true}

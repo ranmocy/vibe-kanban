@@ -1,4 +1,4 @@
-import { useMemo, useCallback, useState } from 'react';
+import { useMemo, useCallback, useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   CaretDownIcon,
@@ -37,6 +37,7 @@ import { CommentWidgetLine } from './CommentWidgetLine';
 import { DisplayTruncatedPath } from '@/utils/TruncatePath';
 import { stripLineEnding, splitLines } from '@/utils/string';
 import type { Diff } from 'shared/types';
+import { RangeHighlightOverlay } from '@/components/diff/RangeHighlightOverlay';
 
 /**
  * Extracts a specific line from file content.
@@ -224,6 +225,114 @@ export function PierreDiffCard({
   const { showGitHubComments, getGitHubCommentsForFile } =
     useWorkspaceContext();
 
+  // Range selection state
+  const [rangeAnchor, setRangeAnchor] = useState<{
+    lineNumber: number;
+    side: DiffSide;
+  } | null>(null);
+  const [rangeHover, setRangeHover] = useState<number | null>(null);
+  const isShiftHeld = useRef(false);
+  const diffWrapperRef = useRef<HTMLDivElement>(null);
+
+  // Track shift key for range selection mode
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') isShiftHeld.current = true;
+    };
+    const up = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') {
+        isShiftHeld.current = false;
+        setRangeAnchor(null);
+        setRangeHover(null);
+      }
+    };
+    document.addEventListener('keydown', down);
+    document.addEventListener('keyup', up);
+    return () => {
+      document.removeEventListener('keydown', down);
+      document.removeEventListener('keyup', up);
+    };
+  }, []);
+
+  // Track mouse movement during range selection to update hover line
+  useEffect(() => {
+    if (!rangeAnchor) return;
+    const wrapper = diffWrapperRef.current;
+    if (!wrapper) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const diffsEl = wrapper.querySelector('diffs-container');
+      const shadow = diffsEl?.shadowRoot;
+      if (!shadow) return;
+
+      // Try shadow DOM elementFromPoint first
+      const el = shadow.elementFromPoint(e.clientX, e.clientY);
+      if (el) {
+        // Try to find a line number directly under cursor
+        const numEl =
+          (el as HTMLElement).closest?.('[data-column-number]') ||
+          (el as HTMLElement).closest?.('[data-line-number]');
+        if (numEl) {
+          const lineNum = parseInt(numEl.textContent?.trim() || '', 10);
+          if (!isNaN(lineNum)) {
+            setRangeHover(lineNum);
+            return;
+          }
+        }
+
+        // If mouse is over code content, find the parent line row
+        const lineRow = (el as HTMLElement).closest?.('[data-line-type]');
+        if (lineRow) {
+          const numChild = lineRow.querySelector('[data-column-number]');
+          if (numChild) {
+            const lineNum = parseInt(
+              numChild.textContent?.trim() || '',
+              10
+            );
+            if (!isNaN(lineNum)) {
+              setRangeHover(lineNum);
+              return;
+            }
+          }
+        }
+      }
+
+      // Fallback: when mouse is over slotted content (e.g. the + button),
+      // shadow.elementFromPoint misses the underlying line row.
+      // Find the nearest line row by Y coordinate.
+      const lineRows = shadow.querySelectorAll('[data-line-type]');
+      for (const row of lineRows) {
+        const rect = row.getBoundingClientRect();
+        if (e.clientY >= rect.top && e.clientY < rect.bottom) {
+          const numChild = row.querySelector('[data-column-number]');
+          if (numChild) {
+            const lineNum = parseInt(
+              numChild.textContent?.trim() || '',
+              10
+            );
+            if (!isNaN(lineNum)) {
+              setRangeHover(lineNum);
+              return;
+            }
+          }
+        }
+      }
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    return () => document.removeEventListener('mousemove', handleMouseMove);
+  }, [rangeAnchor]);
+
+  // Compute highlight range for overlay
+  const highlightRange = useMemo(() => {
+    if (!rangeAnchor || rangeHover == null) return null;
+    return {
+      side: rangeAnchor.side,
+      startLine: Math.min(rangeAnchor.lineNumber, rangeHover),
+      endLine: Math.max(rangeAnchor.lineNumber, rangeHover),
+    };
+  }, [rangeAnchor, rangeHover]);
+
   // File path logic
   const filePath = diff.newPath || diff.oldPath || 'unknown';
   const oldPath = diff.oldPath;
@@ -358,6 +467,7 @@ export function PierreDiffCard({
           );
           addComment({
             filePath,
+            startLineNumber: githubComment.lineNumber,
             lineNumber: githubComment.lineNumber,
             side: githubComment.side,
             text: githubComment.body,
@@ -382,27 +492,57 @@ export function PierreDiffCard({
     [projectId, filePath, addComment, diff]
   );
 
-  // Handle line click to add comment
+  // Handle line click to add comment (with range selection support)
   const handleLineClick = useCallback(
     (props: { lineNumber: number; annotationSide: AnnotationSide }) => {
       const { lineNumber, annotationSide } = props;
-      const splitSide = mapAnnotationSideToSplitSide(annotationSide);
-      const widgetKey = `${filePath}-${splitSide}-${lineNumber}`;
+      const side = mapAnnotationSideToSplitSide(annotationSide);
 
-      // Don't create a new draft if one already exists
-      if (drafts[widgetKey]) return;
-
-      const codeLine = getCodeLineForComment(diff, lineNumber, splitSide);
-
-      setDraft(widgetKey, {
-        filePath,
-        side: splitSide,
-        lineNumber,
-        text: '',
-        ...(codeLine !== undefined ? { codeLine } : {}),
-      });
+      if (rangeAnchor) {
+        // Second click during tracking: finalize range.
+        // Use the end line's side for annotation placement, so
+        // the comment widget renders at the correct line even when
+        // the range spans deletion and addition lines in unified view.
+        const startLine = Math.min(rangeAnchor.lineNumber, lineNumber);
+        const endLine = Math.max(rangeAnchor.lineNumber, lineNumber);
+        const endSide = endLine === lineNumber ? side : rangeAnchor.side;
+        const widgetKey = `${filePath}-${endSide}-${endLine}`;
+        if (!drafts[widgetKey]) {
+          const codeLine = getCodeLineForComment(diff, endLine, endSide);
+          setDraft(widgetKey, {
+            filePath,
+            side: endSide,
+            startLineNumber: startLine,
+            lineNumber: endLine,
+            text: '',
+            ...(codeLine !== undefined ? { codeLine } : {}),
+          });
+        }
+        setRangeAnchor(null);
+        setRangeHover(null);
+      } else if (isShiftHeld.current) {
+        // Shift-click: enter tracking mode
+        setRangeAnchor({ lineNumber, side });
+        setRangeHover(lineNumber);
+      } else {
+        // Normal click: single-line comment
+        setRangeAnchor(null);
+        setRangeHover(null);
+        const widgetKey = `${filePath}-${side}-${lineNumber}`;
+        if (!drafts[widgetKey]) {
+          const codeLine = getCodeLineForComment(diff, lineNumber, side);
+          setDraft(widgetKey, {
+            filePath,
+            side,
+            startLineNumber: lineNumber,
+            lineNumber,
+            text: '',
+            ...(codeLine !== undefined ? { codeLine } : {}),
+          });
+        }
+      }
     },
-    [filePath, drafts, setDraft, diff]
+    [filePath, drafts, setDraft, diff, rangeAnchor]
   );
 
   const renderHoverUtility = useCallback(
@@ -417,21 +557,9 @@ export function PierreDiffCard({
           onClick={() => {
             const line = getHoveredLine();
             if (!line) return;
-
-            const { side, lineNumber } = line;
-            const splitSide = mapAnnotationSideToSplitSide(side);
-            const widgetKey = `${filePath}-${splitSide}-${lineNumber}`;
-
-            if (drafts[widgetKey]) return;
-
-            const codeLine = getCodeLineForComment(diff, lineNumber, splitSide);
-
-            setDraft(widgetKey, {
-              filePath,
-              side: splitSide,
-              lineNumber,
-              text: '',
-              ...(codeLine !== undefined ? { codeLine } : {}),
+            handleLineClick({
+              lineNumber: line.lineNumber,
+              annotationSide: line.side,
             });
           }}
           title={t('comments.addReviewComment')}
@@ -440,7 +568,7 @@ export function PierreDiffCard({
         </button>
       );
     },
-    [filePath, drafts, setDraft, t, diff]
+    [handleLineClick, t]
   );
 
   const fileDiffOptions = useMemo(
@@ -579,13 +707,24 @@ export function PierreDiffCard({
               </p>
             </div>
           ) : (
-            <FileDiff
-              fileDiff={fileDiffMetadata}
-              options={fileDiffOptions}
-              lineAnnotations={annotations}
-              renderAnnotation={renderAnnotation}
-              renderHoverUtility={renderHoverUtility}
-            />
+            <div
+              ref={diffWrapperRef}
+              className={cn('relative', rangeAnchor && 'cursor-crosshair select-none')}
+            >
+              <FileDiff
+                fileDiff={fileDiffMetadata}
+                options={fileDiffOptions}
+                lineAnnotations={annotations}
+                renderAnnotation={renderAnnotation}
+                renderHoverUtility={renderHoverUtility}
+              />
+              {highlightRange && (
+                <RangeHighlightOverlay
+                  containerRef={diffWrapperRef}
+                  range={highlightRange}
+                />
+              )}
+            </div>
           )}
         </div>
       )}

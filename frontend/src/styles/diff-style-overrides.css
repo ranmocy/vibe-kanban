@@ -987,3 +987,11 @@ diffs-container [slot='hover-slot'] button:active {
   outline: none;
   box-shadow: none;
 }
+
+/* =============================================================================
+   Range Selection Highlight
+   ============================================================================= */
+
+.diff-range-highlight-bar {
+  background-color: hsl(var(--brand) / 0.33);
+}
