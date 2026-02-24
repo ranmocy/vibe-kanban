@@ -1,5 +1,7 @@
 import { useMemo, useCallback } from 'react';
-import { usePrComments } from './usePrComments';
+import { useQueries } from '@tanstack/react-query';
+import { attemptsApi } from '@/lib/api';
+import { prCommentsKeys } from './usePrComments';
 import {
   usePersistedExpanded,
   PERSIST_KEYS,
@@ -24,7 +26,7 @@ export interface NormalizedGitHubComment {
 
 interface UseGitHubCommentsOptions {
   workspaceId?: string;
-  repoId?: string;
+  repoIds: string[];
   enabled?: boolean;
 }
 
@@ -41,7 +43,7 @@ interface UseGitHubCommentsResult {
 
 export function useGitHubComments({
   workspaceId,
-  repoId,
+  repoIds,
   enabled = true,
 }: UseGitHubCommentsOptions): UseGitHubCommentsResult {
   // GitHub comments toggle state (persisted)
@@ -50,16 +52,31 @@ export function useGitHubComments({
     true // Default to shown
   );
 
-  // Fetch PR comments for the current workspace
-  const { data: prCommentsData, isLoading: isGitHubCommentsLoading } =
-    usePrComments(workspaceId, repoId, {
-      enabled: enabled && !!repoId,
-    });
+  // Fetch PR comments for all repos with PRs in parallel
+  const queries = useQueries({
+    queries: repoIds.map((repoId) => ({
+      queryKey: prCommentsKeys.byAttempt(workspaceId, repoId),
+      queryFn: () => attemptsApi.getPrComments(workspaceId!, repoId),
+      enabled: enabled && !!workspaceId,
+      staleTime: 30_000,
+      retry: 2,
+    })),
+  });
 
-  const gitHubComments = useMemo(
-    () => prCommentsData?.comments ?? [],
-    [prCommentsData?.comments]
-  );
+  const isGitHubCommentsLoading = queries.some((q) => q.isLoading);
+
+  // Stable reference: only recompute when query data actually changes
+  const queryDataKey = queries.map((q) => q.dataUpdatedAt).join(',');
+  const gitHubComments = useMemo(() => {
+    const all: UnifiedPrComment[] = [];
+    for (const q of queries) {
+      if (q.data?.comments) {
+        all.push(...q.data.comments);
+      }
+    }
+    return all;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queryDataKey]);
 
   // Normalize GitHub review comments for file matching
   const normalizedComments = useMemo(() => {

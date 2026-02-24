@@ -14,6 +14,7 @@ import {
   useGitHubComments,
   type NormalizedGitHubComment,
 } from '@/hooks/useGitHubComments';
+import { useBranchStatus } from '@/hooks/useBranchStatus';
 import { useDiffStream } from '@/hooks/useDiffStream';
 import { attemptsApi } from '@/lib/api';
 import { useDiffViewStore } from '@/stores/useDiffViewStore';
@@ -120,9 +121,19 @@ export function WorkspaceProvider({ children }: WorkspaceProviderProps) {
     enabled: !isCreateMode,
   });
 
-  // Get first repo ID for PR comments.
-  // TODO: Support multiple repos - currently only fetches comments from the primary repo.
-  const primaryRepoId = repos[0]?.id;
+  // Find all repos that have PRs attached by checking branch status merges.
+  // This handles multi-repo workspaces where PRs might be on any repo.
+  const { data: branchStatus } = useBranchStatus(
+    !isCreateMode ? workspaceId : undefined
+  );
+
+  const prRepoIds = useMemo(() => {
+    if (!branchStatus) return repos[0]?.id ? [repos[0].id] : [];
+    const ids = branchStatus
+      .filter((s) => s.merges?.some((m) => m.type === 'pr'))
+      .map((s) => s.repo_id);
+    return ids.length > 0 ? ids : repos[0]?.id ? [repos[0].id] : [];
+  }, [branchStatus, repos]);
 
   // Check if current workspace has a PR attached (from workspace summaries)
   const currentWorkspaceSummary = activeWorkspaces.find(
@@ -142,7 +153,7 @@ export function WorkspaceProvider({ children }: WorkspaceProviderProps) {
     getFirstCommentLineForFile,
   } = useGitHubComments({
     workspaceId,
-    repoId: primaryRepoId,
+    repoIds: prRepoIds,
     enabled: !isCreateMode && hasPrAttached,
   });
 
