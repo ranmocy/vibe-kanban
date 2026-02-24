@@ -3,6 +3,8 @@
 import {
   ApprovalStatus,
   ApiResponse,
+  AttachExistingPrRequest,
+  AttachPrResponse,
   Config,
   CreateFollowUpAttempt,
   ResetProcessRequest,
@@ -699,6 +701,20 @@ export const attemptsApi = {
       body: JSON.stringify(data),
     });
     return handleApiResponseAsResult<string, PrError>(response);
+  },
+
+  attachExistingPr: async (
+    attemptId: string,
+    data: AttachExistingPrRequest
+  ): Promise<Result<AttachPrResponse, PrError>> => {
+    const response = await makeRequest(
+      `/api/task-attempts/${attemptId}/pr/attach`,
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }
+    );
+    return handleApiResponseAsResult<AttachPrResponse, PrError>(response);
   },
 
   generatePrContent: async (

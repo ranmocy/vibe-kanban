@@ -988,6 +988,39 @@ export const Actions = {
     },
   },
 
+  GitAttachPR: {
+    id: 'git-attach-pr',
+    label: 'Attach Existing PR',
+    icon: LinkIcon,
+    requiresTarget: ActionTargetType.GIT,
+    isVisible: (ctx) => ctx.hasWorkspace && ctx.hasGitRepos,
+    execute: async (ctx, workspaceId, repoId) => {
+      const result = await attemptsApi.attachExistingPr(workspaceId, {
+        repo_id: repoId,
+      });
+      if (!result.success) {
+        throw new Error('Failed to attach PR');
+      }
+      if (!result.data.pr_attached) {
+        await ConfirmDialog.show({
+          title: 'No PR Found',
+          message:
+            'No pull request was found matching this branch.',
+          confirmText: 'OK',
+          showCancelButton: false,
+        });
+        return;
+      }
+      invalidateWorkspaceQueries(ctx.queryClient, workspaceId);
+      await ConfirmDialog.show({
+        title: 'PR Attached',
+        message: `Pull request #${result.data.pr_number} has been linked.`,
+        confirmText: 'OK',
+        showCancelButton: false,
+      });
+    },
+  },
+
   GitMerge: {
     id: 'git-merge',
     label: 'Merge',
