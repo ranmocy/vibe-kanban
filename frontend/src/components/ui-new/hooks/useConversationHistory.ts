@@ -662,6 +662,7 @@ export const useConversationHistory = ({
         if (cancelled) return;
       }
       await new Promise((resolve) => setTimeout(resolve, 100));
+      if (cancelled) return;
       emitEntries(displayedExecutionProcesses.current, 'historic', false);
     })();
     return () => {

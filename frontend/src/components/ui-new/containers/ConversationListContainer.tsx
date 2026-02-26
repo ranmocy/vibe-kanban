@@ -163,6 +163,34 @@ const computeItemKey: VirtuosoMessageListProps<
   MessageListContext
 >['computeItemKey'] = ({ data }) => `conv-${data.patchKey}`;
 
+const ConversationSkeleton = () => (
+  <div className="flex flex-col gap-base pt-2 animate-pulse">
+    <div className="py-base px-double">
+      <div className="flex items-center gap-base mb-base">
+        <div className="size-4 bg-secondary rounded" />
+        <div className="h-3 bg-secondary rounded w-24" />
+      </div>
+      <div className="flex flex-col gap-1.5 pl-6">
+        <div className="h-3 bg-secondary rounded w-3/4" />
+        <div className="h-3 bg-secondary rounded w-1/2" />
+      </div>
+    </div>
+    <div className="py-base px-double">
+      <div className="flex flex-col gap-1.5">
+        <div className="h-3 bg-secondary rounded w-full" />
+        <div className="h-3 bg-secondary rounded w-5/6" />
+        <div className="h-3 bg-secondary rounded w-4/6" />
+      </div>
+    </div>
+    <div className="py-base px-double">
+      <div className="flex items-center gap-base">
+        <div className="size-3 bg-secondary rounded" />
+        <div className="h-3 bg-secondary rounded w-48" />
+      </div>
+    </div>
+  </div>
+);
+
 export const ConversationList = forwardRef<
   ConversationListHandle,
   ConversationListProps
@@ -373,16 +401,25 @@ export const ConversationList = forwardRef<
   );
 
   // Determine if content is ready to show (has data or finished loading)
-  const hasContent = !loading || (channelData?.data?.length ?? 0) > 0;
+  const hasContent = !loading;
 
   return (
     <ApprovalFormProvider>
-      <div
-        className={cn(
-          'h-full transition-opacity duration-300',
-          hasContent ? 'opacity-100' : 'opacity-0'
-        )}
-      >
+      <div className="h-full relative">
+        <div
+          className={cn(
+            'absolute inset-0 transition-opacity duration-300 z-10',
+            hasContent ? 'opacity-0 pointer-events-none' : 'opacity-100'
+          )}
+        >
+          <ConversationSkeleton />
+        </div>
+        <div
+          className={cn(
+            'h-full transition-opacity duration-300',
+            hasContent ? 'opacity-100' : 'opacity-0'
+          )}
+        >
         <VirtuosoMessageListLicense
           licenseKey={import.meta.env.VITE_PUBLIC_REACT_VIRTUOSO_LICENSE_KEY}
         >
@@ -420,6 +457,7 @@ export const ConversationList = forwardRef<
             )}
           />
         </VirtuosoMessageListLicense>
+        </div>
       </div>
     </ApprovalFormProvider>
   );
