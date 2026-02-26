@@ -73,6 +73,7 @@ import { DeleteWorkspaceDialog } from '@/components/ui-new/dialogs/DeleteWorkspa
 import { RebaseDialog } from '@/components/ui-new/dialogs/RebaseDialog';
 import { ResolveConflictsDialog } from '@/components/ui-new/dialogs/ResolveConflictsDialog';
 import { RenameWorkspaceDialog } from '@/components/ui-new/dialogs/RenameWorkspaceDialog';
+import { MergeDialog } from '@/components/ui-new/dialogs/MergeDialog';
 import { CreatePRDialog } from '@/components/dialogs/tasks/CreatePRDialog';
 import { getIdeName } from '@/components/ide/IdeIcon';
 import { EditorSelectionDialog } from '@/components/dialogs/tasks/EditorSelectionDialog';
@@ -1098,16 +1099,18 @@ export const Actions = {
         return;
       }
 
-      const confirmResult = await ConfirmDialog.show({
-        title: 'Merge Branch',
-        message:
-          'Are you sure you want to merge this branch into the target branch?',
-        confirmText: 'Merge',
-        cancelText: 'Cancel',
+      const workspace = await getWorkspace(ctx.queryClient, workspaceId);
+      const task = await tasksApi.getById(workspace.task_id);
+
+      const mergeResult = await MergeDialog.show({
+        defaultMessage: task.title,
       });
 
-      if (confirmResult === 'confirmed') {
-        await attemptsApi.merge(workspaceId, { repo_id: repoId });
+      if (mergeResult.action === 'confirmed') {
+        await attemptsApi.merge(workspaceId, {
+          repo_id: repoId,
+          commit_message: mergeResult.commitMessage ?? null,
+        });
         invalidateWorkspaceQueries(ctx.queryClient, workspaceId);
       }
     },
