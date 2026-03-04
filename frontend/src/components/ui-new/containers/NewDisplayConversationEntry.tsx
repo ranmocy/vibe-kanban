@@ -1,4 +1,10 @@
-import { useMemo, useCallback, useLayoutEffect, useRef, useState } from 'react';
+import React, {
+  useMemo,
+  useCallback,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import {
@@ -1022,7 +1028,7 @@ function AggregatedDiffGroupEntry({ group }: { group: AggregatedDiffGroup }) {
   );
 }
 
-const NewDisplayConversationEntrySpaced = (props: Props) => {
+const NewDisplayConversationEntrySpaced = React.memo(function NewDisplayConversationEntrySpaced(props: Props) {
   const { isEntryGreyed } = useMessageEditContext();
   const isGreyed = isEntryGreyed(props.expansionKey);
 
@@ -1036,6 +1042,6 @@ const NewDisplayConversationEntrySpaced = (props: Props) => {
       <NewDisplayConversationEntry {...props} />
     </div>
   );
-};
+});
 
 export default NewDisplayConversationEntrySpaced;

@@ -69,11 +69,9 @@ export function streamJsonPatchEntries<E = unknown>(
         const raw = msg.JsonPatch as Operation[];
         const ops = dedupeOps(raw);
 
-        // Apply to a working copy (applyPatch mutates)
-        const next = structuredClone(snapshot);
-        applyUpsertPatch(next, ops);
-
-        snapshot = next;
+        // applyUpsertPatch mutates in-place; no need to clone since
+        // no consumer holds references to previous snapshots.
+        applyUpsertPatch(snapshot, ops);
         notify();
       }
 

@@ -156,26 +156,13 @@ export const useConversationHistory = ({
     };
   };
 
-  const flattenEntries = (
-    executionProcessState: ExecutionProcessStateStore
-  ): PatchTypeWithKey[] => {
-    return Object.values(executionProcessState)
-      .filter(
-        (p) =>
-          p.executionProcess.executor_action.typ.type ===
-            'CodingAgentFollowUpRequest' ||
-          p.executionProcess.executor_action.typ.type ===
-            'CodingAgentInitialRequest' ||
-          p.executionProcess.executor_action.typ.type === 'ReviewRequest'
-      )
-      .sort(
-        (a, b) =>
-          new Date(
-            a.executionProcess.created_at as unknown as string
-          ).getTime() -
-          new Date(b.executionProcess.created_at as unknown as string).getTime()
-      )
-      .flatMap((p) => p.entries);
+  const isCodingAgentProcess = (ep: ExecutionProcess) => {
+    const type = ep.executor_action.typ.type;
+    return (
+      type === 'CodingAgentFollowUpRequest' ||
+      type === 'CodingAgentInitialRequest' ||
+      type === 'ReviewRequest'
+    );
   };
 
   const getActiveAgentProcesses = (): ExecutionProcess[] => {
@@ -520,14 +507,23 @@ export const useConversationHistory = ({
 
       if (!executionProcesses?.current) return localDisplayedExecutionProcesses;
 
-      for (const executionProcess of [
-        ...executionProcesses.current,
-      ].reverse()) {
-        if (executionProcess.status === ExecutionProcessStatus.running)
-          continue;
+      const processesToLoad = [...executionProcesses.current]
+        .reverse()
+        .filter((ep) => ep.status !== ExecutionProcessStatus.running);
 
-        const entries =
-          await loadEntriesForHistoricExecutionProcess(executionProcess);
+      // Load all processes in parallel instead of sequentially
+      const results = await Promise.allSettled(
+        processesToLoad.map(async (ep) => {
+          const entries = await loadEntriesForHistoricExecutionProcess(ep);
+          return { executionProcess: ep, entries };
+        })
+      );
+
+      // Assemble into state, respecting MIN_INITIAL_ENTRIES
+      let totalEntryCount = 0;
+      for (const result of results) {
+        if (result.status !== 'fulfilled') continue;
+        const { executionProcess, entries } = result.value;
         const entriesWithKey = entries.map((e, idx) =>
           patchWithKey(e, executionProcess.id, idx)
         );
@@ -537,10 +533,10 @@ export const useConversationHistory = ({
           entries: entriesWithKey,
         };
 
-        if (
-          flattenEntries(localDisplayedExecutionProcesses).length >
-          MIN_INITIAL_ENTRIES
-        ) {
+        if (isCodingAgentProcess(executionProcess)) {
+          totalEntryCount += entriesWithKey.length;
+        }
+        if (totalEntryCount > MIN_INITIAL_ENTRIES) {
           break;
         }
       }
@@ -553,6 +549,13 @@ export const useConversationHistory = ({
       if (!executionProcesses?.current) return false;
 
       let anyUpdated = false;
+      // Use a running count instead of calling flattenEntries() on every iteration
+      let totalEntryCount = Object.values(displayedExecutionProcesses.current)
+        .filter((p) =>
+          isCodingAgentProcess(p.executionProcess as ExecutionProcess)
+        )
+        .reduce((sum, p) => sum + p.entries.length, 0);
+
       for (const executionProcess of [
         ...executionProcesses.current,
       ].reverse()) {
@@ -576,9 +579,11 @@ export const useConversationHistory = ({
           };
         });
 
-        if (
-          flattenEntries(displayedExecutionProcesses.current).length > batchSize
-        ) {
+        if (isCodingAgentProcess(executionProcess)) {
+          totalEntryCount += entriesWithKey.length;
+        }
+
+        if (totalEntryCount > batchSize) {
           anyUpdated = true;
           break;
         }

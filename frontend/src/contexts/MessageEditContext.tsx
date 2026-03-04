@@ -25,6 +25,8 @@ const MessageEditContext = createHmrContext<MessageEditContextType | null>(
   null
 );
 
+const ALWAYS_FALSE = () => false;
+
 export function MessageEditProvider({
   children,
 }: {
@@ -33,14 +35,15 @@ export function MessageEditProvider({
   const [activeEdit, setActiveEdit] = useState<EditState | null>(null);
   const { entries } = useEntries();
 
-  // Build entry order map from entries
+  // Only compute entryOrder when in edit mode to avoid work on every entries update
   const entryOrder = useMemo(() => {
+    if (!activeEdit) return null;
     const order: Record<string, number> = {};
     entries.forEach((entry, idx) => {
       order[entry.patchKey] = idx;
     });
     return order;
-  }, [entries]);
+  }, [activeEdit, entries]);
 
   const startEdit = useCallback(
     (entryKey: string, processId: string, originalMessage: string) => {
@@ -53,16 +56,17 @@ export function MessageEditProvider({
     setActiveEdit(null);
   }, []);
 
-  const isEntryGreyed = useCallback(
-    (entryKey: string) => {
-      if (!activeEdit) return false;
+  // When no edit is active (the common case), return a stable function reference
+  // to prevent context value changes from cascading re-renders to all consumers
+  const isEntryGreyed = useMemo(() => {
+    if (!activeEdit || !entryOrder) return ALWAYS_FALSE;
+    return (entryKey: string) => {
       const activeOrder = entryOrder[activeEdit.entryKey];
       const thisOrder = entryOrder[entryKey];
       // Grey out entries that come AFTER the edit target
       return thisOrder > activeOrder;
-    },
-    [activeEdit, entryOrder]
-  );
+    };
+  }, [activeEdit, entryOrder]);
 
   const isInEditMode = activeEdit !== null;
 
