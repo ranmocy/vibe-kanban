@@ -29,12 +29,16 @@ export interface UseConversationHistoryResult {
   hasRunningProcess: boolean;
   /** Whether the conversation only has a single coding agent turn (no follow-ups) */
   isFirstTurn: boolean;
+  /** Whether more history pages exist */
+  hasMoreHistory: boolean;
+  /** Whether a history page is currently loading */
+  isLoadingMore: boolean;
+  /** Load older entries on demand (scroll-triggered) */
+  loadOlderEntries: () => Promise<void>;
 }
 import {
   makeLoadingPatch,
-  MIN_INITIAL_ENTRIES,
   nextActionPatch,
-  REMAINING_BATCH_SIZE,
 } from '@/hooks/useConversationHistory/constants';
 
 export type {
@@ -53,17 +57,26 @@ export {
   isAggregatedThinkingGroup,
 } from '@/hooks/useConversationHistory/types';
 
+const LOG_WS_CONCURRENCY = 4;
+
 export const useConversationHistory = ({
   attempt,
   onEntriesUpdated,
 }: UseConversationHistoryParams): UseConversationHistoryResult => {
   const {
     executionProcessesVisible: executionProcessesRaw,
+    paginatedProcesses,
+    hasMoreHistory,
+    loadMoreHistory,
+    isLoadingMore,
     isLoading,
     isConnected,
   } = useExecutionProcessesContext();
   const { setTokenUsageInfo } = useEntries();
+  // executionProcesses ref tracks the filtered full WS list (for active process detection)
   const executionProcesses = useRef<ExecutionProcess[]>(executionProcessesRaw);
+  // paginatedRef tracks the paginated subset (for initial/on-demand log loading)
+  const paginatedRef = useRef<ExecutionProcess[]>(paginatedProcesses);
   const displayedExecutionProcesses = useRef<ExecutionProcessStateStore>({});
   const loadedInitialEntries = useRef(false);
   const streamingProcessIdsRef = useRef<Set<string>>(new Set());
@@ -77,7 +90,7 @@ export const useConversationHistory = ({
   const [hasCleanupScriptRun, setHasCleanupScriptRun] = useState(false);
   const [hasRunningProcess, setHasRunningProcess] = useState(false);
 
-  // Derive whether this is the first turn (no follow-up processes exist)
+  // Derive whether this is the first turn (uses FULL WS list, not paginated)
   const isFirstTurn = useMemo(() => {
     const codingAgentProcessCount = executionProcessesRaw.filter(
       (ep) =>
@@ -97,7 +110,7 @@ export const useConversationHistory = ({
     onEntriesUpdatedRef.current = onEntriesUpdated;
   }, [onEntriesUpdated]);
 
-  // Keep executionProcesses up to date
+  // Keep executionProcesses ref (full WS list) up to date
   useEffect(() => {
     executionProcesses.current = executionProcessesRaw.filter(
       (ep) =>
@@ -107,6 +120,11 @@ export const useConversationHistory = ({
         ep.run_reason === 'codingagent'
     );
   }, [executionProcessesRaw]);
+
+  // Keep paginatedRef up to date
+  useEffect(() => {
+    paginatedRef.current = paginatedProcesses;
+  }, [paginatedProcesses]);
 
   const loadEntriesForHistoricExecutionProcess = (
     executionProcess: ExecutionProcess
@@ -501,17 +519,19 @@ export const useConversationHistory = ({
     [loadRunningAndEmit]
   );
 
+  // Load entries for processes in the paginated set (no eager loading of all)
   const loadInitialEntries =
     useCallback(async (): Promise<ExecutionProcessStateStore> => {
       const localDisplayedExecutionProcesses: ExecutionProcessStateStore = {};
 
-      if (!executionProcesses?.current) return localDisplayedExecutionProcesses;
+      if (!paginatedRef.current?.length)
+        return localDisplayedExecutionProcesses;
 
-      const processesToLoad = [...executionProcesses.current]
-        .reverse()
-        .filter((ep) => ep.status !== ExecutionProcessStatus.running);
+      const processesToLoad = paginatedRef.current.filter(
+        (ep) => ep.status !== ExecutionProcessStatus.running
+      );
 
-      // Load all processes in parallel instead of sequentially
+      // Load all processes in the paginated page in parallel
       const results = await Promise.allSettled(
         processesToLoad.map(async (ep) => {
           const entries = await loadEntriesForHistoricExecutionProcess(ep);
@@ -519,8 +539,6 @@ export const useConversationHistory = ({
         })
       );
 
-      // Assemble into state, respecting MIN_INITIAL_ENTRIES
-      let totalEntryCount = 0;
       for (const result of results) {
         if (result.status !== 'fulfilled') continue;
         const { executionProcess, entries } = result.value;
@@ -532,67 +550,51 @@ export const useConversationHistory = ({
           executionProcess,
           entries: entriesWithKey,
         };
-
-        if (isCodingAgentProcess(executionProcess)) {
-          totalEntryCount += entriesWithKey.length;
-        }
-        if (totalEntryCount > MIN_INITIAL_ENTRIES) {
-          break;
-        }
       }
 
       return localDisplayedExecutionProcesses;
-    }, [executionProcesses]);
+    }, []);
 
-  const loadRemainingEntriesInBatches = useCallback(
-    async (batchSize: number): Promise<boolean> => {
-      if (!executionProcesses?.current) return false;
+  // Load older entries on demand (scroll-triggered)
+  const loadOlderEntries = useCallback(async () => {
+    // 1. Fetch next page of processes — returns them directly
+    const newProcesses = await loadMoreHistory();
+    if (newProcesses.length === 0) return;
 
-      let anyUpdated = false;
-      // Use a running count instead of calling flattenEntries() on every iteration
-      let totalEntryCount = Object.values(displayedExecutionProcesses.current)
-        .filter((p) =>
-          isCodingAgentProcess(p.executionProcess as ExecutionProcess)
-        )
-        .reduce((sum, p) => sum + p.entries.length, 0);
+    // 2. Filter to non-running processes not already displayed
+    const toLoad = newProcesses.filter(
+      (ep) =>
+        !displayedExecutionProcesses.current[ep.id] &&
+        ep.status !== ExecutionProcessStatus.running
+    );
 
-      for (const executionProcess of [
-        ...executionProcesses.current,
-      ].reverse()) {
-        const current = displayedExecutionProcesses.current;
-        if (
-          current[executionProcess.id] ||
-          executionProcess.status === ExecutionProcessStatus.running
-        )
-          continue;
+    // 3. Load entries with concurrency limit
+    for (let i = 0; i < toLoad.length; i += LOG_WS_CONCURRENCY) {
+      const batch = toLoad.slice(i, i + LOG_WS_CONCURRENCY);
+      const results = await Promise.allSettled(
+        batch.map(async (ep) => ({
+          executionProcess: ep,
+          entries: await loadEntriesForHistoricExecutionProcess(ep),
+        }))
+      );
 
-        const entries =
-          await loadEntriesForHistoricExecutionProcess(executionProcess);
-        const entriesWithKey = entries.map((e, idx) =>
-          patchWithKey(e, executionProcess.id, idx)
-        );
-
+      for (const result of results) {
+        if (result.status !== 'fulfilled') continue;
+        const { executionProcess, entries } = result.value;
         mergeIntoDisplayed((state) => {
           state[executionProcess.id] = {
             executionProcess,
-            entries: entriesWithKey,
+            entries: entries.map((e, idx) =>
+              patchWithKey(e, executionProcess.id, idx)
+            ),
           };
         });
-
-        if (isCodingAgentProcess(executionProcess)) {
-          totalEntryCount += entriesWithKey.length;
-        }
-
-        if (totalEntryCount > batchSize) {
-          anyUpdated = true;
-          break;
-        }
-        anyUpdated = true;
       }
-      return anyUpdated;
-    },
-    [executionProcesses]
-  );
+    }
+
+    // 4. Emit with 'prepend' type
+    emitEntries(displayedExecutionProcesses.current, 'prepend', false);
+  }, [loadMoreHistory, emitEntries]);
 
   const ensureProcessVisible = useCallback((p: ExecutionProcess) => {
     mergeIntoDisplayed((state) => {
@@ -639,18 +641,16 @@ export const useConversationHistory = ({
     }
   }, [idListKey, executionProcessesRaw, emitEntries, isLoading, isConnected]);
 
-  // Initial load when attempt changes
+  // Initial load — loads entries only for processes in the first paginated page
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      // Waiting for execution processes to load
       if (
-        executionProcesses?.current.length === 0 ||
+        !paginatedRef.current?.length ||
         loadedInitialEntries.current
       )
         return;
 
-      // Initial entries
       const allInitialEntries = await loadInitialEntries();
       if (cancelled) return;
       mergeIntoDisplayed((state) => {
@@ -658,28 +658,16 @@ export const useConversationHistory = ({
       });
       emitEntries(displayedExecutionProcesses.current, 'initial', false);
       loadedInitialEntries.current = true;
-
-      // Then load the remaining in batches
-      while (
-        !cancelled &&
-        (await loadRemainingEntriesInBatches(REMAINING_BATCH_SIZE))
-      ) {
-        if (cancelled) return;
-      }
-      await new Promise((resolve) => setTimeout(resolve, 100));
-      if (cancelled) return;
-      emitEntries(displayedExecutionProcesses.current, 'historic', false);
     })();
     return () => {
       cancelled = true;
     };
   }, [
     attempt.id,
-    idListKey,
     loadInitialEntries,
-    loadRemainingEntriesInBatches,
     emitEntries,
-  ]); // include idListKey so new processes trigger reload
+    paginatedProcesses, // re-trigger when paginated data arrives
+  ]);
 
   useEffect(() => {
     const activeProcesses = getActiveAgentProcesses();
@@ -799,5 +787,8 @@ export const useConversationHistory = ({
     hasCleanupScriptRun,
     hasRunningProcess,
     isFirstTurn,
+    hasMoreHistory,
+    isLoadingMore,
+    loadOlderEntries,
   };
 };

@@ -1,6 +1,7 @@
 import React, { useContext, useMemo } from 'react';
 import { createHmrContext } from '@/lib/hmrContext.ts';
 import { useExecutionProcesses } from '@/hooks/useExecutionProcesses';
+import { usePaginatedProcesses } from '@/hooks/usePaginatedProcesses';
 import type { ExecutionProcess } from 'shared/types';
 
 type ExecutionProcessesContextType = {
@@ -15,6 +16,13 @@ type ExecutionProcessesContextType = {
   isLoading: boolean;
   isConnected: boolean;
   error: string | null;
+
+  // Progressive loading fields — used by useConversationHistory
+  // to control which processes have their logs loaded
+  paginatedProcesses: ExecutionProcess[];
+  hasMoreHistory: boolean;
+  loadMoreHistory: () => Promise<ExecutionProcess[]>;
+  isLoadingMore: boolean;
 };
 
 const ExecutionProcessesContext =
@@ -36,6 +44,13 @@ export const ExecutionProcessesProvider: React.FC<{
     isConnected,
     error,
   } = useExecutionProcesses(sessionId, { showSoftDeleted: true });
+
+  const {
+    processes: paginatedProcesses,
+    hasMore: hasMoreHistory,
+    loadMore: loadMoreHistory,
+    isLoadingMore,
+  } = usePaginatedProcesses(sessionId);
 
   // Filter out dropped processes (server already filters by session)
   const visible = useMemo(() => {
@@ -72,6 +87,10 @@ export const ExecutionProcessesProvider: React.FC<{
       isLoading,
       isConnected,
       error,
+      paginatedProcesses,
+      hasMoreHistory,
+      loadMoreHistory,
+      isLoadingMore,
     }),
     [
       executionProcesses,
@@ -83,6 +102,10 @@ export const ExecutionProcessesProvider: React.FC<{
       isLoading,
       isConnected,
       error,
+      paginatedProcesses,
+      hasMoreHistory,
+      loadMoreHistory,
+      isLoadingMore,
     ]
   );
 

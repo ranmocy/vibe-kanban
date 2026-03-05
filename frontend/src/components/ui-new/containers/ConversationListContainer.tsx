@@ -56,6 +56,8 @@ interface MessageListContext {
   showSetupPlaceholder: boolean;
   showCleanupPlaceholder: boolean;
   resetAction: UseResetProcessResult;
+  isLoadingMore: boolean;
+  hasMoreHistory: boolean;
 }
 
 const INITIAL_TOP_ITEM = { index: 'LAST' as const, align: 'end' as const };
@@ -206,6 +208,11 @@ export const ConversationList = forwardRef<
     loading: boolean;
   } | null>(null);
   const debounceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingAddTypePriorityRef = useRef<number>(-1);
+
+  const SCROLL_THRESHOLD_PX = 200;
+  const LOAD_MORE_DEBOUNCE_MS = 150;
+  const loadMoreDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Get repos from workspace context to check if scripts are configured
   let repos: RepoWithTargetBranch[] = [];
@@ -263,17 +270,39 @@ export const ConversationList = forwardRef<
       if (debounceTimeoutRef.current) {
         clearTimeout(debounceTimeoutRef.current);
       }
+      if (loadMoreDebounceRef.current) {
+        clearTimeout(loadMoreDebounceRef.current);
+      }
     };
   }, []);
+
+  const ADD_TYPE_PRIORITY: Record<AddEntryType, number> = {
+    prepend: 4,
+    plan: 3,
+    initial: 2,
+    running: 1,
+    historic: 0,
+  };
 
   const onEntriesUpdated = (
     newEntries: PatchTypeWithKey[],
     addType: AddEntryType,
     newLoading: boolean
   ) => {
+    // Keep the highest-priority addType within the debounce window
+    const priority = ADD_TYPE_PRIORITY[addType] ?? 0;
+    if (priority > pendingAddTypePriorityRef.current) {
+      pendingAddTypePriorityRef.current = priority;
+    }
+
+    const effectiveAddType =
+      Object.entries(ADD_TYPE_PRIORITY).find(
+        ([, v]) => v === pendingAddTypePriorityRef.current
+      )?.[0] as AddEntryType ?? addType;
+
     pendingUpdateRef.current = {
       entries: newEntries,
-      addType,
+      addType: effectiveAddType,
       loading: newLoading,
     };
 
@@ -285,9 +314,12 @@ export const ConversationList = forwardRef<
       const pending = pendingUpdateRef.current;
       if (!pending) return;
 
-      let scrollModifier: ScrollModifier = InitialDataScrollModifier;
+      let scrollModifier: ScrollModifier | undefined =
+        InitialDataScrollModifier;
 
-      if (pending.addType === 'plan' && !loading) {
+      if (pending.addType === 'prepend') {
+        scrollModifier = undefined; // no scroll adjustment — Virtuoso preserves position via key identity
+      } else if (pending.addType === 'plan' && !loading) {
         scrollModifier = ScrollToTopOfLastItem;
       } else if (pending.addType === 'running' && !loading) {
         scrollModifier = AutoScrollToBottom;
@@ -301,6 +333,9 @@ export const ConversationList = forwardRef<
       if (loading) {
         setLoading(pending.loading);
       }
+
+      // Reset priority tracking for next debounce window
+      pendingAddTypePriorityRef.current = -1;
     }, 100);
   };
 
@@ -309,6 +344,9 @@ export const ConversationList = forwardRef<
     hasCleanupScriptRun,
     hasRunningProcess,
     isFirstTurn,
+    hasMoreHistory,
+    isLoadingMore,
+    loadOlderEntries,
   } = useConversationHistory({ attempt, onEntriesUpdated });
 
   // Determine if there are entries to show placeholders
@@ -334,6 +372,8 @@ export const ConversationList = forwardRef<
       showSetupPlaceholder,
       showCleanupPlaceholder,
       resetAction,
+      isLoadingMore,
+      hasMoreHistory,
     }),
     [
       attempt,
@@ -343,6 +383,8 @@ export const ConversationList = forwardRef<
       showSetupPlaceholder,
       showCleanupPlaceholder,
       resetAction,
+      isLoadingMore,
+      hasMoreHistory,
     ]
   );
 
@@ -400,6 +442,25 @@ export const ConversationList = forwardRef<
     [channelData]
   );
 
+  // Scroll-triggered loading of older history
+  const handleScroll = useCallback(
+    (e: React.UIEvent<HTMLDivElement>) => {
+      const { scrollTop } = e.currentTarget;
+      if (
+        scrollTop < SCROLL_THRESHOLD_PX &&
+        hasMoreHistory &&
+        !isLoadingMore
+      ) {
+        if (loadMoreDebounceRef.current)
+          clearTimeout(loadMoreDebounceRef.current);
+        loadMoreDebounceRef.current = setTimeout(() => {
+          loadOlderEntries();
+        }, LOAD_MORE_DEBOUNCE_MS);
+      }
+    },
+    [hasMoreHistory, isLoadingMore, loadOlderEntries]
+  );
+
   // Determine if content is ready to show (has data or finished loading)
   const hasContent = !loading;
 
@@ -419,6 +480,7 @@ export const ConversationList = forwardRef<
             'h-full transition-opacity duration-300',
             hasContent ? 'opacity-100' : 'opacity-0'
           )}
+          onScroll={handleScroll}
         >
         <VirtuosoMessageListLicense
           licenseKey={import.meta.env.VITE_PUBLIC_REACT_VIRTUOSO_LICENSE_KEY}
@@ -433,6 +495,11 @@ export const ConversationList = forwardRef<
             ItemContent={ItemContent}
             Header={({ context }) => (
               <div className="pt-2">
+                {context?.isLoadingMore && (
+                  <div className="flex justify-center items-center py-2 text-low text-sm">
+                    <span>Loading older messages...</span>
+                  </div>
+                )}
                 {context?.showSetupPlaceholder && (
                   <div className="my-base px-double">
                     <ChatScriptPlaceholder

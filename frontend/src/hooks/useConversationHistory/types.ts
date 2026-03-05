@@ -72,7 +72,12 @@ export function isAggregatedThinkingGroup(
   return entry.type === 'AGGREGATED_THINKING_GROUP';
 }
 
-export type AddEntryType = 'initial' | 'running' | 'historic' | 'plan';
+export type AddEntryType =
+  | 'initial'
+  | 'running'
+  | 'historic'
+  | 'plan'
+  | 'prepend';
 
 export type OnEntriesUpdated = (
   newEntries: PatchTypeWithKey[],

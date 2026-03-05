@@ -9,13 +9,14 @@ use axum::{
     response::{IntoResponse, Json as ResponseJson},
     routing::{get, post},
 };
+use chrono::{DateTime, Utc};
 use db::models::{
     execution_process::{ExecutionProcess, ExecutionProcessError, ExecutionProcessStatus},
     execution_process_repo_state::ExecutionProcessRepoState,
 };
 use deployment::Deployment;
 use futures_util::{SinkExt, StreamExt, TryStreamExt};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use services::services::container::ContainerService;
 use utils::{log_msg::LogMsg, response::ApiResponse};
 use uuid::Uuid;
@@ -243,6 +244,54 @@ pub async fn get_execution_process_repo_states(
     Ok(ResponseJson(ApiResponse::success(repo_states)))
 }
 
+#[derive(Debug, Deserialize)]
+struct HistoryQuery {
+    session_id: Uuid,
+    #[serde(default = "default_history_limit")]
+    limit: i64,
+    before: Option<DateTime<Utc>>,
+    #[serde(default)]
+    show_soft_deleted: bool,
+}
+
+fn default_history_limit() -> i64 {
+    10
+}
+
+#[derive(Serialize)]
+struct HistoryResponse {
+    processes: Vec<ExecutionProcess>,
+    has_more: bool,
+    next_cursor: Option<String>,
+}
+
+async fn get_execution_processes_history(
+    Query(query): Query<HistoryQuery>,
+    State(deployment): State<DeploymentImpl>,
+) -> Result<ResponseJson<HistoryResponse>, ApiError> {
+    let limit = query.limit.clamp(1, 50);
+    let (processes, has_more) = ExecutionProcess::find_by_session_id_paginated(
+        &deployment.db().pool,
+        query.session_id,
+        limit,
+        query.before,
+        query.show_soft_deleted,
+    )
+    .await?;
+
+    let next_cursor = if has_more {
+        processes.first().map(|p| p.created_at.to_rfc3339())
+    } else {
+        None
+    };
+
+    Ok(ResponseJson(HistoryResponse {
+        processes,
+        has_more,
+        next_cursor,
+    }))
+}
+
 pub fn router(deployment: &DeploymentImpl) -> Router<DeploymentImpl> {
     let workspace_id_router = Router::new()
         .route("/", get(get_execution_process_by_id))
@@ -256,6 +305,7 @@ pub fn router(deployment: &DeploymentImpl) -> Router<DeploymentImpl> {
         ));
 
     let workspaces_router = Router::new()
+        .route("/history", get(get_execution_processes_history))
         .route(
             "/stream/session/ws",
             get(stream_execution_processes_by_session_ws),
