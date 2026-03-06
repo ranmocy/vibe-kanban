@@ -533,11 +533,15 @@ pub async fn merge_task_attempt(
         &merge_commit_id,
     )
     .await?;
-    Task::update_status(pool, task.id, TaskStatus::Done).await?;
-    if !workspace.pinned
-        && let Err(e) = deployment.container().archive_workspace(workspace.id).await
-    {
-        tracing::error!("Failed to archive workspace {}: {}", workspace.id, e);
+    // Only auto-archive if no open PRs remain for this workspace
+    let still_has_open = Merge::has_open_prs_for_workspace(pool, workspace.id).await?;
+    if !still_has_open {
+        Task::update_status(pool, task.id, TaskStatus::Done).await?;
+        if !workspace.pinned
+            && let Err(e) = deployment.container().archive_workspace(workspace.id).await
+        {
+            tracing::error!("Failed to archive workspace {}: {}", workspace.id, e);
+        }
     }
 
     deployment

@@ -732,13 +732,17 @@ pub async fn attach_existing_pr(
             });
         }
 
-        // If PR is merged, mark task as done and archive workspace
+        // If PR is merged and no other open PRs remain, mark task as done and archive workspace
         if matches!(pr_info.status, MergeStatus::Merged) {
-            Task::update_status(pool, task.id, TaskStatus::Done).await?;
-            if !workspace.pinned
-                && let Err(e) = deployment.container().archive_workspace(workspace.id).await
-            {
-                tracing::error!("Failed to archive workspace {}: {}", workspace.id, e);
+            let still_has_open =
+                Merge::has_open_prs_for_workspace(pool, workspace.id).await?;
+            if !still_has_open {
+                Task::update_status(pool, task.id, TaskStatus::Done).await?;
+                if !workspace.pinned
+                    && let Err(e) = deployment.container().archive_workspace(workspace.id).await
+                {
+                    tracing::error!("Failed to archive workspace {}: {}", workspace.id, e);
+                }
             }
         }
 

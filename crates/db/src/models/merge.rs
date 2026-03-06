@@ -316,6 +316,20 @@ impl Merge {
         Ok(rows.into_iter().map(Into::into).collect())
     }
 
+    /// Check if a workspace has any open PRs
+    pub async fn has_open_prs_for_workspace(
+        pool: &SqlitePool,
+        workspace_id: Uuid,
+    ) -> Result<bool, sqlx::Error> {
+        let row: (i32,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM merges WHERE workspace_id = $1 AND merge_type = 'pr' AND pr_status = 'open'",
+        )
+        .bind(workspace_id)
+        .fetch_one(pool)
+        .await?;
+        Ok(row.0 > 0)
+    }
+
     /// Get the latest PR status for each workspace (for workspace summaries)
     /// Returns a map of workspace_id -> MergeStatus for workspaces that have PRs
     pub async fn get_latest_pr_status_for_workspaces(

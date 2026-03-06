@@ -124,20 +124,30 @@ impl<C: ContainerService + Send + Sync + 'static> PrMonitorService<C> {
             self.sync_pr_to_remote(pr_merge, &pr_status.status, pr_status.merge_commit_sha)
                 .await;
 
-            // If the PR was merged, update the task status to done
+            // If the PR was merged, check if all PRs are resolved before auto-archiving
             if matches!(&pr_status.status, MergeStatus::Merged)
                 && let Some(workspace) =
                     Workspace::find_by_id(&self.db.pool, pr_merge.workspace_id).await?
             {
-                info!(
-                    "PR #{} was merged, updating task {} to done and archiving workspace",
-                    pr_merge.pr_info.number, workspace.task_id
-                );
-                Task::update_status(&self.db.pool, workspace.task_id, TaskStatus::Done).await?;
-                if !workspace.pinned
-                    && let Err(e) = self.container.archive_workspace(workspace.id).await
-                {
-                    error!("Failed to archive workspace {}: {}", workspace.id, e);
+                let still_has_open =
+                    Merge::has_open_prs_for_workspace(&self.db.pool, workspace.id).await?;
+                if still_has_open {
+                    info!(
+                        "PR #{} merged but workspace {} still has open PRs, skipping auto-archive",
+                        pr_merge.pr_info.number, workspace.id
+                    );
+                } else {
+                    info!(
+                        "All PRs merged, updating task {} to done and archiving workspace {}",
+                        workspace.task_id, workspace.id
+                    );
+                    Task::update_status(&self.db.pool, workspace.task_id, TaskStatus::Done)
+                        .await?;
+                    if !workspace.pinned
+                        && let Err(e) = self.container.archive_workspace(workspace.id).await
+                    {
+                        error!("Failed to archive workspace {}: {}", workspace.id, e);
+                    }
                 }
 
                 // Track analytics event
