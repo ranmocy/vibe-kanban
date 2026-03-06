@@ -77,6 +77,9 @@ const config: DecoratorNodeConfig<NormalizedComment> = {
       !!(data.id && data.comment_type && data.author && data.body),
   },
   component: PrCommentComponent,
+  domStyle: {
+    display: 'block',
+  },
   exportDOM: (data) => {
     const span = document.createElement('span');
     span.setAttribute('data-pr-comment-id', data.id);
