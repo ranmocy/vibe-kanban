@@ -268,6 +268,7 @@ export function LandingPage() {
     const success = await updateAndSaveConfig({
       onboarding_acknowledged: true,
       disclaimer_acknowledged: true,
+      remote_onboarding_acknowledged: true,
       executor_profile: {
         executor: selectedAgent,
         variant: null,
@@ -284,9 +285,9 @@ export function LandingPage() {
     if (success) {
       trackRemoteOnboardingEvent(REMOTE_ONBOARDING_EVENTS.STAGE_COMPLETED, {
         stage: 'landing',
-        destination: '/onboarding/sign-in',
+        destination: '/workspaces/create',
       });
-      navigate('/onboarding/sign-in', { replace: true });
+      navigate('/workspaces/create', { replace: true });
       return;
     }
 
