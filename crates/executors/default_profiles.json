@@ -3,37 +3,26 @@
     "CLAUDE_CODE": {
       "DEFAULT": {
         "CLAUDE_CODE": {
-          "dangerously_skip_permissions": true
+          "model": "opus",
+          "disable_api_key": true
         }
       },
       "PLAN": {
         "CLAUDE_CODE": {
-          "plan": true
-        }
-      },
-      "OPUS": {
-        "CLAUDE_CODE": {
-          "model": "opus"
-        }
-      },
-      "APPROVALS": {
-        "CLAUDE_CODE": {
-          "approvals": true
+          "model": "opus",
+          "plan": true,
+          "disable_api_key": true
         }
       }
     },
     "AMP": {
       "DEFAULT": {
-        "AMP": {
-          "dangerously_allow_all": true
-        }
+        "AMP": {}
       }
     },
     "GEMINI": {
       "DEFAULT": {
-        "GEMINI": {
-          "yolo": true
-        }
+        "GEMINI": {}
       },
       "FLASH": {
         "GEMINI": {
@@ -56,7 +45,7 @@
     "CODEX": {
       "DEFAULT": {
         "CODEX": {
-          "sandbox": "danger-full-access"
+          "sandbox": "workspace-write"
         }
       },
       "HIGH": {
@@ -87,7 +76,7 @@
     "OPENCODE": {
       "DEFAULT": {
         "OPENCODE": {
-          "auto_approve": true
+          "auto_approve": false
         }
       },
       "PLAN": {
@@ -104,9 +93,7 @@
     },
     "QWEN_CODE": {
       "DEFAULT": {
-        "QWEN_CODE": {
-          "yolo": true
-        }
+        "QWEN_CODE": {}
       },
       "APPROVALS": {
         "QWEN_CODE": {
@@ -117,7 +104,6 @@
     "CURSOR_AGENT": {
       "DEFAULT": {
         "CURSOR_AGENT": {
-              "force": true,
               "model": "auto"
         }
       },
@@ -202,9 +188,7 @@
     },
     "COPILOT": {
       "DEFAULT": {
-        "COPILOT": {
-          "allow_all_tools": true
-        }
+        "COPILOT": {}
       },
       "GPT_5_2": {
         "COPILOT": {
@@ -288,7 +272,7 @@
     "DROID": {
       "DEFAULT": {
         "DROID": {
-          "autonomy": "skip-permissions-unsafe"
+          "autonomy": "normal"
         }
       },
       "GPT_5_1_CODEX": {

@@ -180,7 +180,7 @@ impl ClaudeCode {
         &self,
     ) -> Result<CommandBuilder, CommandBuildError> {
         let mut builder =
-            CommandBuilder::new(base_command(self.claude_code_router.unwrap_or(false)))
+            CommandBuilder::new(base_command(self.claude_code_router.unwrap_or(false)).await)
                 .params(["-p"]);
 
         builder = builder.extend_params([

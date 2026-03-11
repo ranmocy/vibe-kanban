@@ -49,12 +49,24 @@ use crate::{
     stdout_dup::create_stdout_pipe_writer,
 };
 
-fn base_command(claude_code_router: bool) -> &'static str {
+const CLAUDE_CODE_NPX: &str = "npx -y @anthropic-ai/claude-code@2.1.32";
+const CLAUDE_CODE_ROUTER_NPX: &str = "npx -y @musistudio/claude-code-router@1.0.66 code";
+
+/// Resolve the base command for Claude Code.
+///
+/// When no base_command_override is specified, the resolution order is:
+/// 1. `claude` binary available in PATH (includes homebrew paths)
+/// 2. Fallback to npx with pinned version
+async fn base_command(claude_code_router: bool) -> String {
     if claude_code_router {
-        "npx -y @musistudio/claude-code-router@1.0.66 code"
-    } else {
-        "npx -y @anthropic-ai/claude-code@2.1.32"
+        return CLAUDE_CODE_ROUTER_NPX.to_string();
     }
+
+    if let Some(path) = workspace_utils::shell::resolve_executable_path("claude").await {
+        return path.to_string_lossy().to_string();
+    }
+
+    CLAUDE_CODE_NPX.to_string()
 }
 
 use derivative::Derivative;
@@ -95,7 +107,7 @@ impl ClaudeCode {
         }
 
         let mut builder =
-            CommandBuilder::new(base_command(self.claude_code_router.unwrap_or(false)))
+            CommandBuilder::new(base_command(self.claude_code_router.unwrap_or(false)).await)
                 .params(["-p"]);
 
         let plan = self.plan.unwrap_or(false);
