@@ -401,8 +401,6 @@ impl ClaudeCode {
 pub enum HistoryStrategy {
     // Claude-code format
     Default,
-    // Amp threads format which includes logs from previous executions
-    AmpResume,
 }
 
 /// Default context window for models (used until we get actual value from result)
@@ -1028,37 +1026,6 @@ impl ClaudeLogProcessor {
                     return patches;
                 }
 
-                if matches!(self.strategy, HistoryStrategy::AmpResume)
-                    && message
-                        .content
-                        .items()
-                        .any(|c| matches!(c, ClaudeContentItem::Text { .. }))
-                {
-                    let cur = entry_index_provider.current();
-                    if cur > 0 {
-                        for _ in 0..cur {
-                            patches.push(ConversationPatch::remove_diff(0.to_string()));
-                        }
-                        entry_index_provider.reset();
-                        self.tool_map.clear();
-                    }
-
-                    for item in message.content.items() {
-                        if let ClaudeContentItem::Text { text } = item {
-                            let entry = NormalizedEntry {
-                                timestamp: None,
-                                entry_type: NormalizedEntryType::UserMessage,
-                                content: text.clone(),
-                                metadata: Some(
-                                    serde_json::to_value(item).unwrap_or(serde_json::Value::Null),
-                                ),
-                            };
-                            let id = entry_index_provider.next();
-                            patches.push(ConversationPatch::add_normalized_entry(id, entry));
-                        }
-                    }
-                }
-
                 if *is_synthetic {
                     for item in message.content.items() {
                         if let ClaudeContentItem::Text { text } = item {
@@ -1120,7 +1087,7 @@ impl ClaudeLogProcessor {
                             };
 
                             let result = if let Ok(result) =
-                                serde_json::from_str::<AmpBashResult>(&content_str)
+                                serde_json::from_str::<BashToolResult>(&content_str)
                             {
                                 Some(crate::logs::CommandRunResult {
                                     exit_status: Some(crate::logs::CommandExitStatus::ExitCode {
@@ -1375,22 +1342,7 @@ impl ClaudeLogProcessor {
                     patches.push(self.add_token_usage_entry(entry_index_provider));
                 }
 
-                if matches!(self.strategy, HistoryStrategy::AmpResume) && is_error.unwrap_or(false)
-                {
-                    let entry = NormalizedEntry {
-                        timestamp: None,
-                        entry_type: NormalizedEntryType::ErrorMessage {
-                            error_type: NormalizedEntryError::Other,
-                        },
-                        content: serde_json::to_string(claude_json)
-                            .unwrap_or_else(|_| "error".to_string()),
-                        metadata: Some(
-                            serde_json::to_value(claude_json).unwrap_or(serde_json::Value::Null),
-                        ),
-                    };
-                    let idx = entry_index_provider.next();
-                    patches.push(ConversationPatch::add_normalized_entry(idx, entry));
-                } else if matches!(subtype.as_deref(), Some("success"))
+                if matches!(subtype.as_deref(), Some("success"))
                     && let Some(text) = result.as_ref().and_then(|v| v.as_str())
                     && (self.last_assistant_message.is_none()
                         || matches!(&self.last_assistant_message, Some(message) if !message.contains(text)))
@@ -2069,7 +2021,7 @@ pub enum ClaudeToolData {
         #[serde(default)]
         num_results: Option<u32>,
     },
-    // Amp-only utilities for better UX
+    // Additional tool types for compatibility
     #[serde(rename = "Oracle", alias = "oracle")]
     Oracle {
         #[serde(default)]
@@ -2124,11 +2076,11 @@ struct ClaudeToolWithInput {
     input: serde_json::Value,
 }
 
-// Amp's claude-compatible Bash tool_result content format
+// Bash tool_result content format with structured exit code
 // Example content (often delivered as a JSON string):
 //   {"output":"...","exitCode":0}
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
-struct AmpBashResult {
+struct BashToolResult {
     #[serde(default)]
     output: String,
     #[serde(rename = "exitCode")]

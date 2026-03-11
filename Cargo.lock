@@ -2298,7 +2298,6 @@ dependencies = [
  "derivative",
  "dirs 5.0.1",
  "enum_dispatch",
- "eventsource-stream",
  "futures",
  "futures-io",
  "git",

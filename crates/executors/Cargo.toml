@@ -42,7 +42,6 @@ codex-core = { git = "https://github.com/openai/codex.git", package = "codex-cor
 sha2 = "0.10"
 derivative = "2.2.0"
 reqwest = { workspace = true }
-eventsource-stream = "0.2"
 walkdir = "2"
 rand = "0.8"
 base64 = "0.22"

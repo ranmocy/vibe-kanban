@@ -275,7 +275,7 @@ pub struct StartWorkspaceSessionRequest {
     #[schemars(description = "A title for the workspace (used as the task name)")]
     pub title: String,
     #[schemars(
-        description = "The coding agent executor to run ('CLAUDE_CODE', 'AMP', 'GEMINI', 'CODEX', 'OPENCODE', 'CURSOR_AGENT', 'QWEN_CODE', 'COPILOT', 'DROID')"
+        description = "The coding agent executor to run ('CLAUDE_CODE', 'GEMINI', 'CODEX')"
     )]
     pub executor: String,
     #[schemars(description = "Optional executor variant, if needed")]
