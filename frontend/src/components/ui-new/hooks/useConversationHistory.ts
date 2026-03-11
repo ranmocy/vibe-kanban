@@ -676,7 +676,7 @@ export const useConversationHistory = ({
     for (const activeProcess of activeProcesses) {
       if (!displayedExecutionProcesses.current[activeProcess.id]) {
         const runningOrInitial =
-          Object.keys(displayedExecutionProcesses.current).length > 1
+          Object.keys(displayedExecutionProcesses.current).length > 0
             ? 'running'
             : 'initial';
         ensureProcessVisible(activeProcess);
