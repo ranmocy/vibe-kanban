@@ -21,6 +21,7 @@ import { useTypeaheadOpen } from '@/components/ui/wysiwyg/context/typeahead-open
 type Props = {
   onCmdEnter?: () => void;
   onShiftCmdEnter?: () => void;
+  onShiftTab?: () => void;
   onChange?: (markdown: string) => void;
   transformers?: Transformer[];
   sendShortcut?: SendMessageShortcut;
@@ -29,6 +30,7 @@ type Props = {
 export function KeyboardCommandsPlugin({
   onCmdEnter,
   onShiftCmdEnter,
+  onShiftTab,
   onChange,
   transformers,
   sendShortcut = 'ModifierEnter',
@@ -92,6 +94,12 @@ export function KeyboardCommandsPlugin({
         }
 
         if (!isSelectionInsideListItem()) {
+          // Shift+Tab outside list items cycles the variant
+          if (event.shiftKey && onShiftTab) {
+            event.preventDefault();
+            onShiftTab();
+            return true;
+          }
           return false;
         }
 
@@ -210,6 +218,7 @@ export function KeyboardCommandsPlugin({
     editor,
     onCmdEnter,
     onShiftCmdEnter,
+    onShiftTab,
     onChange,
     transformers,
     sendShortcut,

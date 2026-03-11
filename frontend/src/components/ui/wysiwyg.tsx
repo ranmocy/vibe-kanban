@@ -79,6 +79,7 @@ type WysiwygProps = {
   executor?: BaseCodingAgent | null;
   onCmdEnter?: () => void;
   onShiftCmdEnter?: () => void;
+  onShiftTab?: () => void;
   /** Keyboard shortcut mode for sending messages */
   sendShortcut?: SendMessageShortcut;
   /** Task attempt ID for resolving .vibe-images paths (preferred over taskId) */
@@ -138,6 +139,7 @@ const WYSIWYGEditor = forwardRef<WYSIWYGEditorRef, WysiwygProps>(
       executor = null,
       onCmdEnter,
       onShiftCmdEnter,
+      onShiftTab,
       sendShortcut,
       taskAttemptId,
       taskId,
@@ -345,6 +347,7 @@ const WYSIWYGEditor = forwardRef<WYSIWYGEditorRef, WysiwygProps>(
                       <KeyboardCommandsPlugin
                         onCmdEnter={onCmdEnter}
                         onShiftCmdEnter={onShiftCmdEnter}
+                        onShiftTab={onShiftTab}
                         onChange={onChange}
                         transformers={extendedTransformers}
                         sendShortcut={sendShortcut}

@@ -394,6 +394,14 @@ export function SessionChatBoxContainer(props: SessionChatBoxContainerProps) {
     navigate('/settings/agents');
   }, [navigate]);
 
+  // Cycle variant on Shift+Tab
+  const handleCycleVariant = useCallback(() => {
+    if (variantOptions.length === 0) return;
+    const currentIdx = variantOptions.indexOf(selectedVariant ?? '');
+    const nextIdx = (currentIdx + 1) % variantOptions.length;
+    setSelectedVariant(variantOptions[nextIdx]);
+  }, [variantOptions, selectedVariant, setSelectedVariant]);
+
   // Queue interaction
   const {
     isQueued,
@@ -758,6 +766,7 @@ export function SessionChatBoxContainer(props: SessionChatBoxContainerProps) {
         showOpenWorkspaceButton && workspaceId ? handleOpenWorkspace : undefined
       }
       onScrollToPreviousMessage={onScrollToPreviousMessage}
+      onShiftTab={handleCycleVariant}
       repoIds={repoIds}
       projectId={projectId}
       tokenUsageInfo={tokenUsageInfo}

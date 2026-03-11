@@ -151,6 +151,7 @@ interface SessionChatBoxProps {
   todos?: TodoItem[];
   inProgressTodo?: TodoItem | null;
   localImages?: LocalImageMetadata[];
+  onShiftTab?: () => void;
   onViewCode?: () => void;
   onOpenWorkspace?: () => void;
   onScrollToPreviousMessage?: () => void;
@@ -182,6 +183,7 @@ export function SessionChatBox({
   todos,
   inProgressTodo,
   localImages,
+  onShiftTab,
   onViewCode,
   onOpenWorkspace,
   onScrollToPreviousMessage,
@@ -520,6 +522,7 @@ export function SessionChatBox({
       editor={editor}
       placeholder={placeholder}
       onCmdEnter={handleCmdEnter}
+      onShiftTab={onShiftTab}
       disabled={isDisabled}
       repoIds={repoIds}
       projectId={projectId}

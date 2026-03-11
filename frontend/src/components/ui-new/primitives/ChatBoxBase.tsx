@@ -44,6 +44,7 @@ interface ChatBoxBaseProps {
   editor: EditorProps;
   placeholder: string;
   onCmdEnter: () => void;
+  onShiftTab?: () => void;
   disabled?: boolean;
   repoIds?: string[];
   projectId?: string;
@@ -99,6 +100,7 @@ export function ChatBoxBase({
   editor,
   placeholder,
   onCmdEnter,
+  onShiftTab,
   disabled,
   repoIds,
   projectId,
@@ -183,6 +185,7 @@ export function ChatBoxBase({
           value={editor.value}
           onChange={editor.onChange}
           onCmdEnter={onCmdEnter}
+          onShiftTab={onShiftTab}
           disabled={disabled}
           // min-h-double ensures space for at least one line of text,
           // preventing the absolutely-positioned placeholder from overlapping
