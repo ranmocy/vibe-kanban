@@ -374,17 +374,21 @@ async fn bulk_update_issues(
 
         let status_id = item.status_id.as_deref().unwrap_or(&existing.status_id);
         let title = item.title.as_deref().unwrap_or(&existing.title);
+        let description = item.description.as_deref().or(existing.description.as_deref());
+        let priority = item.priority.as_deref().or(existing.priority.as_deref());
         let sort_order = item.sort_order.unwrap_or(existing.sort_order);
         let parent_issue_id = item.parent_issue_id.as_deref().or(existing.parent_issue_id.as_deref());
         let parent_issue_sort_order = item.parent_issue_sort_order.or(existing.parent_issue_sort_order);
         let completed_at = item.completed_at.as_deref().or(existing.completed_at.as_deref());
 
         sqlx::query(
-            "UPDATE kanban_issues SET status_id = ?, title = ?, sort_order = ?, \
+            "UPDATE kanban_issues SET status_id = ?, title = ?, description = ?, priority = ?, sort_order = ?, \
              parent_issue_id = ?, parent_issue_sort_order = ?, completed_at = ?, updated_at = ? WHERE id = ?",
         )
         .bind(status_id)
         .bind(title)
+        .bind(description)
+        .bind(priority)
         .bind(sort_order)
         .bind(parent_issue_id)
         .bind(parent_issue_sort_order)

@@ -244,7 +244,6 @@ impl StandardCodingAgentExecutor for ClaudeCode {
             msg_store.clone(),
             current_dir,
             entry_index_provider.clone(),
-            HistoryStrategy::Default,
         );
 
         // Process stderr logs using the standard stderr processor
@@ -397,12 +396,6 @@ impl ClaudeCode {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum HistoryStrategy {
-    // Claude-code format
-    Default,
-}
-
 /// Default context window for models (used until we get actual value from result)
 const DEFAULT_CLAUDE_CONTEXT_WINDOW: u32 = 200_000;
 
@@ -411,8 +404,6 @@ pub struct ClaudeLogProcessor {
     model_name: Option<String>,
     // Map tool_use_id -> structured info for follow-up ToolResult replacement
     tool_map: HashMap<String, ClaudeToolCallInfo>,
-    // Strategy controlling how to handle history and user messages
-    strategy: HistoryStrategy,
     streaming_messages: HashMap<String, StreamingMessageState>,
     streaming_message_id: Option<String>,
     last_assistant_message: Option<String>,
@@ -423,17 +414,11 @@ pub struct ClaudeLogProcessor {
 }
 
 impl ClaudeLogProcessor {
-    #[cfg(test)]
     fn new() -> Self {
-        Self::new_with_strategy(HistoryStrategy::Default)
-    }
-
-    fn new_with_strategy(strategy: HistoryStrategy) -> Self {
         Self {
             model_name: None,
             main_model_name: None,
             tool_map: HashMap::new(),
-            strategy,
             streaming_messages: HashMap::new(),
             streaming_message_id: None,
             last_assistant_message: None,
@@ -447,7 +432,6 @@ impl ClaudeLogProcessor {
         msg_store: Arc<MsgStore>,
         current_dir: &Path,
         entry_index_provider: EntryIndexProvider,
-        strategy: HistoryStrategy,
     ) {
         let current_dir_clone = current_dir.to_owned();
         tokio::spawn(async move {
@@ -455,7 +439,7 @@ impl ClaudeLogProcessor {
             let mut buffer = String::new();
             let worktree_path = current_dir_clone.to_string_lossy().to_string();
             let mut session_id_extracted = false;
-            let mut processor = Self::new_with_strategy(strategy);
+            let mut processor = Self::new();
             // Track pending assistant UUID - only committed when we see a Result message
             let mut pending_assistant_uuid: Option<String> = None;
 
@@ -1423,7 +1407,7 @@ impl ClaudeLogProcessor {
                 ClaudeStreamEvent::Unknown => {}
             },
             ClaudeJson::Result {
-                is_error,
+                is_error: _,
                 model_usage,
                 subtype,
                 result,
@@ -1788,6 +1772,9 @@ impl StreamingContentState {
             ) => {
                 self.buffer.push_str(thinking);
             }
+            (_, ClaudeContentBlockDelta::SignatureDelta { .. }) => {
+                // Signature deltas are part of thinking verification, not content
+            }
             _ => {
                 tracing::warn!(
                     "Mismatched content types: delta {:?}, kind {:?}",
@@ -2005,6 +1992,8 @@ pub enum ClaudeContentBlockDelta {
     TextDelta { text: String },
     #[serde(rename = "thinking_delta")]
     ThinkingDelta { thinking: String },
+    #[serde(rename = "signature_delta")]
+    SignatureDelta { signature: String },
     #[serde(other)]
     Unknown,
 }

@@ -94,7 +94,6 @@ impl StandardCodingAgentExecutor for QaMockExecutor {
             msg_store,
             current_dir,
             entry_index_provider,
-            crate::executors::claude::HistoryStrategy::Default,
         );
     }
 

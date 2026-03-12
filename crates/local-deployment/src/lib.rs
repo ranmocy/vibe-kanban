@@ -20,7 +20,7 @@ use services::services::{
     pr_monitor::PrMonitorService,
     project::ProjectService,
     queued_message::QueuedMessageService,
-    remote_client::{RemoteClient, RemoteClientError},
+    remote_client::RemoteClient,
     repo::RepoService,
     worktree_manager::WorktreeManager,
 };
