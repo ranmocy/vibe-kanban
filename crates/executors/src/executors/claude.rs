@@ -411,6 +411,9 @@ pub struct ClaudeLogProcessor {
     main_model_name: Option<String>,
     main_model_context_window: u32,
     context_tokens_used: u32,
+    // Background process tracking
+    background_processes: HashMap<String, crate::logs::BackgroundProcessItem>,
+    background_status_entry_index: Option<usize>,
 }
 
 impl ClaudeLogProcessor {
@@ -424,6 +427,8 @@ impl ClaudeLogProcessor {
             last_assistant_message: None,
             main_model_context_window: DEFAULT_CLAUDE_CONTEXT_WINDOW,
             context_tokens_used: 0,
+            background_processes: HashMap::new(),
+            background_status_entry_index: None,
         }
     }
 
@@ -750,8 +755,13 @@ impl ClaudeLogProcessor {
                     changes: diffs,
                 }
             }
-            ClaudeToolData::Bash { command, .. } => ActionType::CommandRun {
+            ClaudeToolData::Bash {
+                command,
+                run_in_background,
+                ..
+            } => ActionType::CommandRun {
                 command: command.clone(),
+                run_in_background: *run_in_background,
                 result: None,
             },
             ClaudeToolData::Grep { pattern, .. } => ActionType::Search {
@@ -777,10 +787,10 @@ impl ClaudeLogProcessor {
                 ActionType::TaskCreate {
                     description: task_description,
                     subagent_type: subagent_type.clone(),
+                    run_in_background: *run_in_background,
                     result: None,
                     agent_name: name.clone(),
                     team_name: team_name.clone(),
-                    run_in_background: *run_in_background,
                     isolation: isolation.clone(),
                 }
             }
@@ -1003,6 +1013,37 @@ impl ClaudeLogProcessor {
                                 ConversationPatch::replace(id_num, entry)
                             };
                             patches.push(patch);
+
+                            // Track background processes (agents and commands)
+                            let bg_info = match tool_data {
+                                ClaudeToolData::Task {
+                                    run_in_background: Some(true),
+                                    description,
+                                    prompt,
+                                    ..
+                                } => Some((
+                                    description.clone().or_else(|| prompt.clone()).unwrap_or_default(),
+                                    "agent",
+                                )),
+                                ClaudeToolData::Bash {
+                                    run_in_background: Some(true),
+                                    command,
+                                    description,
+                                    ..
+                                } => Some((
+                                    description.clone().unwrap_or_else(|| command.clone()),
+                                    "command",
+                                )),
+                                _ => None,
+                            };
+                            if let Some((desc, ptype)) = bg_info {
+                                patches.push(self.track_background_process(
+                                    id,
+                                    desc,
+                                    ptype,
+                                    entry_index_provider,
+                                ));
+                            }
                         }
                         ClaudeContentItem::Text { .. } | ClaudeContentItem::Thinking { .. } => {
                             if let Some(entry) = Self::content_item_to_normalized_entry(
@@ -1123,12 +1164,21 @@ impl ClaudeLogProcessor {
                                 ToolStatus::Success
                             };
 
+                            // Extract run_in_background from original tool_data
+                            let run_in_background =
+                                if let ClaudeToolData::Bash { run_in_background, .. } = &info.tool_data {
+                                    *run_in_background
+                                } else {
+                                    None
+                                };
+
                             let entry = NormalizedEntry {
                                 timestamp: None,
                                 entry_type: NormalizedEntryType::ToolUse {
                                     tool_name: info.tool_name.clone(),
                                     action_type: ActionType::CommandRun {
                                         command: info.content.clone(),
+                                        run_in_background,
                                         result,
                                     },
                                     status,
@@ -1137,6 +1187,14 @@ impl ClaudeLogProcessor {
                                 metadata: None,
                             };
                             patches.push(ConversationPatch::replace(info.entry_index, entry));
+                            // Update background process tracking if this was a background command
+                            if let Some(patch) = self.complete_background_process(
+                                tool_use_id,
+                                is_error.unwrap_or(false),
+                                entry_index_provider,
+                            ) {
+                                patches.push(patch);
+                            }
                         } else if matches!(info.tool_data, ClaudeToolData::Task { .. }) {
                             // Handle Task tool results - capture subagent output
                             let (res_type, res_value) =
@@ -1192,6 +1250,14 @@ impl ClaudeLogProcessor {
                                 metadata: None,
                             };
                             patches.push(ConversationPatch::replace(info.entry_index, entry));
+                            // Update background process tracking if this was a background agent
+                            if let Some(patch) = self.complete_background_process(
+                                tool_use_id,
+                                is_error.unwrap_or(false),
+                                entry_index_provider,
+                            ) {
+                                patches.push(patch);
+                            }
                         } else if matches!(
                             info.tool_data,
                             ClaudeToolData::TeamCreate { .. }
@@ -1618,6 +1684,72 @@ impl ClaudeLogProcessor {
         };
         let idx = entry_index_provider.next();
         ConversationPatch::add_normalized_entry(idx, entry)
+    }
+
+    /// Track a background process (agent or command) and emit a status patch
+    fn track_background_process(
+        &mut self,
+        tool_use_id: &str,
+        description: String,
+        process_type: &str,
+        entry_index_provider: &EntryIndexProvider,
+    ) -> json_patch::Patch {
+        self.background_processes.insert(
+            tool_use_id.to_string(),
+            crate::logs::BackgroundProcessItem {
+                description,
+                process_type: process_type.to_string(),
+                status: "running".to_string(),
+            },
+        );
+        self.emit_background_status_patch(entry_index_provider)
+    }
+
+    /// Update a tracked background process status and emit a status patch
+    fn complete_background_process(
+        &mut self,
+        tool_use_id: &str,
+        failed: bool,
+        entry_index_provider: &EntryIndexProvider,
+    ) -> Option<json_patch::Patch> {
+        if let Some(item) = self.background_processes.get_mut(tool_use_id) {
+            item.status = if failed { "failed" } else { "completed" }.to_string();
+            Some(self.emit_background_status_patch(entry_index_provider))
+        } else {
+            None
+        }
+    }
+
+    /// Emit (add or replace) the background process status entry
+    fn emit_background_status_patch(
+        &mut self,
+        entry_index_provider: &EntryIndexProvider,
+    ) -> json_patch::Patch {
+        let active_count = self
+            .background_processes
+            .values()
+            .filter(|p| p.status == "running")
+            .count() as u32;
+        let processes: Vec<_> = self.background_processes.values().cloned().collect();
+        let entry = NormalizedEntry {
+            timestamp: None,
+            entry_type: NormalizedEntryType::BackgroundProcessStatus(
+                crate::logs::BackgroundProcessInfo {
+                    processes,
+                    active_count,
+                },
+            ),
+            content: format!("{} background processes", active_count),
+            metadata: None,
+        };
+
+        if let Some(idx) = self.background_status_entry_index {
+            ConversationPatch::replace(idx, entry)
+        } else {
+            let idx = entry_index_provider.next();
+            self.background_status_entry_index = Some(idx);
+            ConversationPatch::add_normalized_entry(idx, entry)
+        }
     }
 }
 
@@ -2078,6 +2210,8 @@ pub enum ClaudeToolData {
         command: String,
         #[serde(default)]
         description: Option<String>,
+        #[serde(default)]
+        run_in_background: Option<bool>,
     },
     #[serde(rename = "Grep", alias = "grep")]
     Grep {

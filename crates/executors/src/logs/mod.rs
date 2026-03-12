@@ -96,12 +96,28 @@ pub enum NormalizedEntryType {
         needs_setup: bool,
     },
     TokenUsageInfo(TokenUsageInfo),
+    BackgroundProcessStatus(BackgroundProcessInfo),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 pub struct TokenUsageInfo {
     pub total_tokens: u32,
     pub model_context_window: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct BackgroundProcessItem {
+    pub description: String,
+    pub process_type: String,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct BackgroundProcessInfo {
+    pub processes: Vec<BackgroundProcessItem>,
+    pub active_count: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -191,6 +207,8 @@ pub enum ActionType {
     CommandRun {
         command: String,
         #[serde(default)]
+        run_in_background: Option<bool>,
+        #[serde(default)]
         result: Option<CommandRunResult>,
     },
     Search {
@@ -212,13 +230,13 @@ pub enum ActionType {
         #[serde(default)]
         subagent_type: Option<String>,
         #[serde(default)]
+        run_in_background: Option<bool>,
+        #[serde(default)]
         result: Option<ToolResult>,
         #[serde(default)]
         agent_name: Option<String>,
         #[serde(default)]
         team_name: Option<String>,
-        #[serde(default)]
-        run_in_background: Option<bool>,
         #[serde(default)]
         isolation: Option<String>,
     },

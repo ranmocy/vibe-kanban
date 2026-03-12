@@ -87,6 +87,7 @@ impl ToNormalizedEntry for CommandState {
                 tool_name: "bash".to_string(),
                 action_type: ActionType::CommandRun {
                     command: self.command.clone(),
+                    run_in_background: None,
                     result: Some(CommandRunResult {
                         exit_status: self
                             .exit_code
@@ -229,10 +230,10 @@ impl ToNormalizedEntry for ReviewState {
                 action_type: ActionType::TaskCreate {
                     description: self.description.clone(),
                     subagent_type: Some("review".to_string()),
+                    run_in_background: None,
                     result: self.result.clone(),
                     agent_name: None,
                     team_name: None,
-                    run_in_background: None,
                     isolation: None,
                 },
                 status: self.status.clone(),

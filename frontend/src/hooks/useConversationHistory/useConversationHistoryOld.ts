@@ -312,6 +312,7 @@ export const useConversationHistoryOld = ({
                 action_type: {
                   action: 'command_run',
                   command: p.executionProcess.executor_action.typ.script,
+                  run_in_background: null,
                   result: {
                     output,
                     exit_status,

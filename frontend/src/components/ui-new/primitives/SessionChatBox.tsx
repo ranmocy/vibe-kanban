@@ -51,6 +51,7 @@ import { type ExecutorProps } from './CreateChatBox';
 import { ContextUsageGauge } from './ContextUsageGauge';
 import { TodoProgressButton, TodoExpandedList } from './TodoProgressPopup';
 import { useUserSystem } from '@/components/ConfigProvider';
+import { BackgroundAgentsIndicator } from './conversation/BackgroundAgentsIndicator';
 
 // Re-export shared types
 export type { EditorProps, VariantProps } from './ChatBoxBase';
@@ -503,6 +504,9 @@ export function SessionChatBox({
         </div>
       );
     }
+
+    // Background agents banner
+    banners.push(<BackgroundAgentsIndicator key="background-agents" />);
 
     return banners.length > 0 ? <>{banners}</> : null;
   };

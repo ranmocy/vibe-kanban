@@ -1,4 +1,5 @@
 import {
+  BackgroundProcessInfo,
   CommandExitStatus,
   ExecutionProcess,
   ExecutionProcessStatus,
@@ -72,7 +73,7 @@ export const useConversationHistory = ({
     isLoading,
     isConnected,
   } = useExecutionProcessesContext();
-  const { setTokenUsageInfo } = useEntries();
+  const { setTokenUsageInfo, setBackgroundProcessInfo } = useEntries();
   // executionProcesses ref tracks the filtered full WS list (for active process detection)
   const executionProcesses = useRef<ExecutionProcess[]>(executionProcessesRaw);
   // paginatedRef tracks the paginated subset (for initial/on-demand log loading)
@@ -202,6 +203,7 @@ export const useConversationHistory = ({
       let needsSetup = false;
       let setupHelpText: string | undefined;
       let latestTokenUsageInfo: TokenUsageInfo | null = null;
+      let latestBackgroundProcessInfo: BackgroundProcessInfo | null = null;
 
       // Create user messages + tool calls for setup/cleanup scripts
       const allEntries = Object.values(executionProcessState)
@@ -254,12 +256,24 @@ export const useConversationHistory = ({
                 .entry_type as TokenUsageInfo;
             }
 
-            // Remove user messages (replaced with custom one) and token usage info (displayed separately)
+            // Extract latest background process status before filtering
+            const bgProcessEntry = p.entries.findLast(
+              (e) =>
+                e.type === 'NORMALIZED_ENTRY' &&
+                e.content.entry_type.type === 'background_process_status'
+            );
+            if (bgProcessEntry?.type === 'NORMALIZED_ENTRY') {
+              latestBackgroundProcessInfo = bgProcessEntry.content
+                .entry_type as BackgroundProcessInfo;
+            }
+
+            // Remove user messages (replaced with custom one), token usage info, and background process status (displayed separately)
             const entriesExcludingUser = p.entries.filter(
               (e) =>
                 e.type !== 'NORMALIZED_ENTRY' ||
                 (e.content.entry_type.type !== 'user_message' &&
-                  e.content.entry_type.type !== 'token_usage_info')
+                  e.content.entry_type.type !== 'token_usage_info' &&
+                  e.content.entry_type.type !== 'background_process_status')
             );
 
             const hasPendingApprovalEntry = entriesExcludingUser.some(
@@ -391,6 +405,7 @@ export const useConversationHistory = ({
                 action_type: {
                   action: 'command_run',
                   command: p.executionProcess.executor_action.typ.script,
+                  run_in_background: null,
                   result: {
                     output,
                     exit_status,
@@ -435,9 +450,12 @@ export const useConversationHistory = ({
       // Update token usage info in context
       setTokenUsageInfo(latestTokenUsageInfo);
 
+      // Update background process info in context
+      setBackgroundProcessInfo(latestBackgroundProcessInfo);
+
       return allEntries;
     },
-    [setTokenUsageInfo]
+    [setTokenUsageInfo, setBackgroundProcessInfo]
   );
 
   const emitEntries = useCallback(

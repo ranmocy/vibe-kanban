@@ -414,6 +414,10 @@ function NewDisplayConversationEntry(props: Props) {
       // Displayed in the chat header as the context-usage gauge
       return null;
 
+    case 'background_process_status':
+      // Displayed in the chat box banner area
+      return null;
+
     case 'user_feedback':
     case 'loading':
       // Fallback to legacy component for these entry types

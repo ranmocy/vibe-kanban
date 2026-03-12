@@ -521,7 +521,7 @@ params: Array<string> | null, };
 
 export type ExecutorProfileId = { 
 /**
- * The executor type (e.g., "CLAUDE_CODE", "AMP")
+ * The executor type (e.g., "CLAUDE_CODE", "GEMINI")
  */
 executor: BaseCodingAgent, 
 /**
@@ -593,9 +593,13 @@ export type CommandRunResult = { exit_status: CommandExitStatus | null, output: 
 
 export type NormalizedEntry = { timestamp: string | null, entry_type: NormalizedEntryType, content: string, };
 
-export type NormalizedEntryType = { "type": "user_message" } | { "type": "user_feedback", denied_tool: string, } | { "type": "assistant_message" } | { "type": "tool_use", tool_name: string, action_type: ActionType, status: ToolStatus, } | { "type": "system_message" } | { "type": "error_message", error_type: NormalizedEntryError, } | { "type": "thinking" } | { "type": "loading" } | { "type": "next_action", failed: boolean, execution_processes: number, needs_setup: boolean, } | { "type": "token_usage_info" } & TokenUsageInfo;
+export type NormalizedEntryType = { "type": "user_message" } | { "type": "user_feedback", denied_tool: string, } | { "type": "assistant_message" } | { "type": "tool_use", tool_name: string, action_type: ActionType, status: ToolStatus, } | { "type": "system_message" } | { "type": "error_message", error_type: NormalizedEntryError, } | { "type": "thinking" } | { "type": "loading" } | { "type": "next_action", failed: boolean, execution_processes: number, needs_setup: boolean, } | { "type": "token_usage_info" } & TokenUsageInfo | { "type": "background_process_status" } & BackgroundProcessInfo;
 
 export type TokenUsageInfo = { total_tokens: number, model_context_window: number, };
+
+export type BackgroundProcessInfo = { processes: Array<BackgroundProcessItem>, active_count: number, };
+
+export type BackgroundProcessItem = { description: string, process_type: string, status: string, };
 
 export type FileChange = { "action": "write", content: string, } | { "action": "delete" } | { "action": "rename", new_path: string, } | { "action": "edit", 
 /**
@@ -607,7 +611,7 @@ unified_diff: string,
  */
 has_line_numbers: boolean, };
 
-export type ActionType = { "action": "file_read", path: string, } | { "action": "file_edit", path: string, changes: Array<FileChange>, } | { "action": "command_run", command: string, result: CommandRunResult | null, } | { "action": "search", query: string, } | { "action": "web_fetch", url: string, } | { "action": "tool", tool_name: string, arguments: JsonValue | null, result: ToolResult | null, } | { "action": "task_create", description: string, subagent_type: string | null, result: ToolResult | null, agent_name: string | null, team_name: string | null, run_in_background: boolean | null, isolation: string | null, } | { "action": "team_create", name: string, result: ToolResult | null, } | { "action": "team_delete", name: string, result: ToolResult | null, } | { "action": "agent_message", recipient: string, message: string, team_name: string | null, result: ToolResult | null, } | { "action": "plan_presentation", plan: string, } | { "action": "todo_management", todos: Array<TodoItem>, operation: string, } | { "action": "other", description: string, };
+export type ActionType = { "action": "file_read", path: string, } | { "action": "file_edit", path: string, changes: Array<FileChange>, } | { "action": "command_run", command: string, run_in_background: boolean | null, result: CommandRunResult | null, } | { "action": "search", query: string, } | { "action": "web_fetch", url: string, } | { "action": "tool", tool_name: string, arguments: JsonValue | null, result: ToolResult | null, } | { "action": "task_create", description: string, subagent_type: string | null, run_in_background: boolean | null, result: ToolResult | null, agent_name: string | null, team_name: string | null, isolation: string | null, } | { "action": "team_create", name: string, result: ToolResult | null, } | { "action": "team_delete", name: string, result: ToolResult | null, } | { "action": "agent_message", recipient: string, message: string, team_name: string | null, result: ToolResult | null, } | { "action": "plan_presentation", plan: string, } | { "action": "todo_management", todos: Array<TodoItem>, operation: string, } | { "action": "other", description: string, };
 
 export type TodoItem = { content: string, status: string, priority: string | null, };
 
