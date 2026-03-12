@@ -43,6 +43,8 @@ import { ChatThinkingMessage } from '../primitives/conversation/ChatThinkingMess
 import { ChatErrorMessage } from '../primitives/conversation/ChatErrorMessage';
 import { ChatScriptEntry } from '../primitives/conversation/ChatScriptEntry';
 import { ChatSubagentEntry } from '../primitives/conversation/ChatSubagentEntry';
+import { ChatTeamEvent } from '../primitives/conversation/ChatTeamEvent';
+import { ChatAgentMessage } from '../primitives/conversation/ChatAgentMessage';
 import { ChatAggregatedToolEntries } from '../primitives/conversation/ChatAggregatedToolEntries';
 import { ChatAggregatedDiffEntries } from '../primitives/conversation/ChatAggregatedDiffEntries';
 import { ChatCollapsedThinking } from '../primitives/conversation/ChatCollapsedThinking';
@@ -94,6 +96,18 @@ function getToolSummary(
     case 'task_create':
       return t('conversation.toolSummary.createdTask', {
         description: action_type.description,
+      });
+    case 'team_create':
+      return t('conversation.toolSummary.createdTeam', {
+        name: action_type.name,
+      });
+    case 'team_delete':
+      return t('conversation.toolSummary.deletedTeam', {
+        name: action_type.name,
+      });
+    case 'agent_message':
+      return t('conversation.toolSummary.sentAgentMessage', {
+        recipient: action_type.recipient,
       });
     case 'todo_management':
       return t('conversation.toolSummary.todoOperation', {
@@ -206,6 +220,42 @@ function renderToolUseEntry(
       <SubagentEntry
         description={action_type.description}
         subagentType={action_type.subagent_type}
+        agentName={action_type.agent_name}
+        teamName={action_type.team_name}
+        runInBackground={action_type.run_in_background}
+        isolation={action_type.isolation}
+        result={action_type.result}
+        expansionKey={expansionKey}
+        status={status}
+        workspaceId={taskAttempt?.id}
+      />
+    );
+  }
+
+  // Team create/delete events
+  if (
+    action_type.action === 'team_create' ||
+    action_type.action === 'team_delete'
+  ) {
+    return (
+      <TeamEventEntry
+        eventType={action_type.action === 'team_create' ? 'create' : 'delete'}
+        teamName={action_type.name}
+        result={action_type.result}
+        expansionKey={expansionKey}
+        status={status}
+        workspaceId={taskAttempt?.id}
+      />
+    );
+  }
+
+  // Agent-to-agent messages
+  if (action_type.action === 'agent_message') {
+    return (
+      <AgentMessageEntry
+        recipient={action_type.recipient}
+        message={action_type.message}
+        teamName={action_type.team_name}
         result={action_type.result}
         expansionKey={expansionKey}
         status={status}
@@ -682,6 +732,10 @@ function TodoManagementEntry({
 function SubagentEntry({
   description,
   subagentType,
+  agentName,
+  teamName,
+  runInBackground,
+  isolation,
   result,
   expansionKey,
   status,
@@ -689,6 +743,10 @@ function SubagentEntry({
 }: {
   description: string;
   subagentType: string | null | undefined;
+  agentName?: string | null;
+  teamName?: string | null;
+  runInBackground?: boolean | null;
+  isolation?: string | null;
   result: ToolResult | null | undefined;
   expansionKey: string;
   status: ToolStatus;
@@ -705,6 +763,87 @@ function SubagentEntry({
     <ChatSubagentEntry
       description={description}
       subagentType={subagentType}
+      agentName={agentName}
+      teamName={teamName}
+      runInBackground={runInBackground}
+      isolation={isolation}
+      result={result}
+      expanded={expanded}
+      onToggle={hasResult ? toggle : undefined}
+      status={status}
+      workspaceId={workspaceId}
+    />
+  );
+}
+
+/**
+ * Team create/delete event entry
+ */
+function TeamEventEntry({
+  eventType,
+  teamName,
+  result,
+  expansionKey,
+  status,
+  workspaceId,
+}: {
+  eventType: 'create' | 'delete';
+  teamName: string;
+  result: ToolResult | null | undefined;
+  expansionKey: string;
+  status: ToolStatus;
+  workspaceId: string | undefined;
+}) {
+  const hasResult = Boolean(result?.value);
+  const [expanded, toggle] = usePersistedExpanded(
+    `team:${expansionKey}`,
+    false
+  );
+
+  return (
+    <ChatTeamEvent
+      eventType={eventType}
+      teamName={teamName}
+      result={result}
+      expanded={expanded}
+      onToggle={hasResult ? toggle : undefined}
+      status={status}
+      workspaceId={workspaceId}
+    />
+  );
+}
+
+/**
+ * Agent-to-agent message entry
+ */
+function AgentMessageEntry({
+  recipient,
+  message,
+  teamName,
+  result,
+  expansionKey,
+  status,
+  workspaceId,
+}: {
+  recipient: string;
+  message: string;
+  teamName?: string | null;
+  result: ToolResult | null | undefined;
+  expansionKey: string;
+  status: ToolStatus;
+  workspaceId: string | undefined;
+}) {
+  const hasResult = Boolean(result?.value);
+  const [expanded, toggle] = usePersistedExpanded(
+    `agentmsg:${expansionKey}`,
+    false
+  );
+
+  return (
+    <ChatAgentMessage
+      recipient={recipient}
+      message={message}
+      teamName={teamName}
       result={result}
       expanded={expanded}
       onToggle={hasResult ? toggle : undefined}

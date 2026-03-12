@@ -61,11 +61,21 @@
       "fetched": "Fetched {{url}}",
       "ranCommand": "Ran command",
       "createdTask": "Created task: {{description}}",
-      "todoOperation": "{{operation}} todos"
+      "todoOperation": "{{operation}} todos",
+      "createdTeam": "Created team: {{name}}",
+      "deletedTeam": "Deleted team: {{name}}",
+      "sentAgentMessage": "Message to {{recipient}}"
     },
     "fixScript": "Fix Script",
     "subagent": {
       "defaultType": "Subagent"
+    },
+    "team": {
+      "created": "Team Created",
+      "deleted": "Team Deleted"
+    },
+    "agentMessage": {
+      "sentTo": "Message → {{recipient}}"
     }
   },
   "folderPicker": {

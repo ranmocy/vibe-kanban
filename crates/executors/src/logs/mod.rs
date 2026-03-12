@@ -213,6 +213,32 @@ pub enum ActionType {
         subagent_type: Option<String>,
         #[serde(default)]
         result: Option<ToolResult>,
+        #[serde(default)]
+        agent_name: Option<String>,
+        #[serde(default)]
+        team_name: Option<String>,
+        #[serde(default)]
+        run_in_background: Option<bool>,
+        #[serde(default)]
+        isolation: Option<String>,
+    },
+    TeamCreate {
+        name: String,
+        #[serde(default)]
+        result: Option<ToolResult>,
+    },
+    TeamDelete {
+        name: String,
+        #[serde(default)]
+        result: Option<ToolResult>,
+    },
+    AgentMessage {
+        recipient: String,
+        message: String,
+        #[serde(default)]
+        team_name: Option<String>,
+        #[serde(default)]
+        result: Option<ToolResult>,
     },
     PlanPresentation {
         plan: String,

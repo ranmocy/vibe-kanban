@@ -779,6 +779,11 @@ impl ClaudeLogProcessor {
                 description,
                 prompt,
                 subagent_type,
+                name,
+                team_name,
+                run_in_background,
+                isolation,
+                ..
             } => {
                 let task_description = if let Some(desc) = description {
                     desc.clone()
@@ -789,6 +794,10 @@ impl ClaudeLogProcessor {
                     description: task_description,
                     subagent_type: subagent_type.clone(),
                     result: None,
+                    agent_name: name.clone(),
+                    team_name: team_name.clone(),
+                    run_in_background: *run_in_background,
+                    isolation: isolation.clone(),
                 }
             }
             ClaudeToolData::ExitPlanMode { plan } => {
@@ -831,6 +840,24 @@ impl ClaudeLogProcessor {
             },
             ClaudeToolData::UndoEdit { .. } => ActionType::Other {
                 description: "Undo edit".to_string(),
+            },
+            ClaudeToolData::TeamCreate { name } => ActionType::TeamCreate {
+                name: name.clone(),
+                result: None,
+            },
+            ClaudeToolData::TeamDelete { name } => ActionType::TeamDelete {
+                name: name.clone(),
+                result: None,
+            },
+            ClaudeToolData::SendMessage {
+                recipient,
+                message,
+                team_name,
+            } => ActionType::AgentMessage {
+                recipient: recipient.clone(),
+                message: message.clone(),
+                team_name: team_name.clone(),
+                result: None,
             },
             ClaudeToolData::Unknown { .. } => {
                 // Surface MCP tools as generic Tool with args
@@ -1137,13 +1164,26 @@ impl ClaudeLogProcessor {
                                 ToolStatus::Success
                             };
 
-                            // Extract subagent_type from the original tool_data
-                            let subagent_type =
-                                if let ClaudeToolData::Task { subagent_type, .. } = &info.tool_data
+                            // Extract fields from the original tool_data
+                            let (subagent_type, agent_name, team_name, run_in_background, isolation) =
+                                if let ClaudeToolData::Task {
+                                    subagent_type,
+                                    name,
+                                    team_name,
+                                    run_in_background,
+                                    isolation,
+                                    ..
+                                } = &info.tool_data
                                 {
-                                    subagent_type.clone()
+                                    (
+                                        subagent_type.clone(),
+                                        name.clone(),
+                                        team_name.clone(),
+                                        *run_in_background,
+                                        isolation.clone(),
+                                    )
                                 } else {
-                                    None
+                                    (None, None, None, None, None)
                                 };
 
                             let entry = NormalizedEntry {
@@ -1157,7 +1197,65 @@ impl ClaudeLogProcessor {
                                             r#type: res_type,
                                             value: res_value,
                                         }),
+                                        agent_name,
+                                        team_name,
+                                        run_in_background,
+                                        isolation,
                                     },
+                                    status,
+                                },
+                                content: info.content.clone(),
+                                metadata: None,
+                            };
+                            patches.push(ConversationPatch::replace(info.entry_index, entry));
+                        } else if matches!(
+                            info.tool_data,
+                            ClaudeToolData::TeamCreate { .. }
+                                | ClaudeToolData::TeamDelete { .. }
+                                | ClaudeToolData::SendMessage { .. }
+                        ) {
+                            // Handle team management tool results
+                            let (res_type, res_value) =
+                                Self::normalize_claude_tool_result_value(content);
+
+                            let status = if is_error.unwrap_or(false) {
+                                ToolStatus::Failed
+                            } else {
+                                ToolStatus::Success
+                            };
+
+                            let tool_result = Some(crate::logs::ToolResult {
+                                r#type: res_type,
+                                value: res_value,
+                            });
+
+                            let action_type = match &info.tool_data {
+                                ClaudeToolData::TeamCreate { name } => ActionType::TeamCreate {
+                                    name: name.clone(),
+                                    result: tool_result,
+                                },
+                                ClaudeToolData::TeamDelete { name } => ActionType::TeamDelete {
+                                    name: name.clone(),
+                                    result: tool_result,
+                                },
+                                ClaudeToolData::SendMessage {
+                                    recipient,
+                                    message,
+                                    team_name,
+                                } => ActionType::AgentMessage {
+                                    recipient: recipient.clone(),
+                                    message: message.clone(),
+                                    team_name: team_name.clone(),
+                                    result: tool_result,
+                                },
+                                _ => unreachable!(),
+                            };
+
+                            let entry = NormalizedEntry {
+                                timestamp: None,
+                                entry_type: NormalizedEntryType::ToolUse {
+                                    tool_name: info.tool_name.clone(),
+                                    action_type,
                                     status,
                                 },
                                 content: info.content.clone(),
@@ -1426,12 +1524,23 @@ impl ClaudeLogProcessor {
             ActionType::CommandRun { command, .. } => command.to_string(),
             ActionType::Search { query } => query.to_string(),
             ActionType::WebFetch { url } => url.to_string(),
-            ActionType::TaskCreate { description, .. } => {
+            ActionType::TaskCreate {
+                description,
+                agent_name,
+                ..
+            } => {
                 if description.is_empty() {
                     "Task".to_string()
+                } else if let Some(name) = agent_name {
+                    format!("Agent {name}: `{description}`")
                 } else {
                     format!("Task: `{description}`")
                 }
+            }
+            ActionType::TeamCreate { name, .. } => format!("Create team: {name}"),
+            ActionType::TeamDelete { name, .. } => format!("Delete team: {name}"),
+            ActionType::AgentMessage { recipient, .. } => {
+                format!("Message to {recipient}")
             }
             ActionType::Tool { .. } => match tool_data {
                 ClaudeToolData::NotebookEdit { notebook_path, .. } => {
@@ -1943,6 +2052,18 @@ pub enum ClaudeToolData {
         subagent_type: Option<String>,
         description: Option<String>,
         prompt: Option<String>,
+        #[serde(default)]
+        name: Option<String>,
+        #[serde(default)]
+        team_name: Option<String>,
+        #[serde(default)]
+        run_in_background: Option<bool>,
+        #[serde(default)]
+        isolation: Option<String>,
+        #[serde(default)]
+        mode: Option<String>,
+        #[serde(default)]
+        resume: Option<String>,
     },
     #[serde(rename = "Glob", alias = "glob")]
     Glob {
@@ -2057,6 +2178,17 @@ pub enum ClaudeToolData {
     },
     #[serde(rename = "TodoRead", alias = "todo_read")]
     TodoRead {},
+    #[serde(rename = "TeamCreate", alias = "team_create")]
+    TeamCreate { name: String },
+    #[serde(rename = "TeamDelete", alias = "team_delete")]
+    TeamDelete { name: String },
+    #[serde(rename = "SendMessage", alias = "send_message")]
+    SendMessage {
+        recipient: String,
+        message: String,
+        #[serde(default)]
+        team_name: Option<String>,
+    },
     #[serde(untagged)]
     Unknown {
         #[serde(flatten)]
@@ -2133,6 +2265,9 @@ impl ClaudeToolData {
             ClaudeToolData::Mermaid { .. } => "Mermaid",
             ClaudeToolData::CodebaseSearchAgent { .. } => "CodebaseSearchAgent",
             ClaudeToolData::UndoEdit { .. } => "UndoEdit",
+            ClaudeToolData::TeamCreate { .. } => "TeamCreate",
+            ClaudeToolData::TeamDelete { .. } => "TeamDelete",
+            ClaudeToolData::SendMessage { .. } => "SendMessage",
             ClaudeToolData::Unknown { data } => data
                 .get("name")
                 .and_then(|v| v.as_str())

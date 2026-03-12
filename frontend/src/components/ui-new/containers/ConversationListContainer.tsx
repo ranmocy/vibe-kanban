@@ -39,6 +39,8 @@ import type { RepoWithTargetBranch } from 'shared/types';
 import { useWorkspaceContext } from '@/contexts/WorkspaceContext';
 import { ChatScriptPlaceholder } from '../primitives/conversation/ChatScriptPlaceholder';
 import { ScriptFixerDialog } from '@/components/dialogs/scripts/ScriptFixerDialog';
+import { useTeamStatus } from '@/hooks/useTeamStatus';
+import { TeamStatusIndicator } from '../primitives/conversation/TeamStatusIndicator';
 
 interface ConversationListProps {
   attempt: WorkspaceWithSession;
@@ -201,7 +203,7 @@ export const ConversationList = forwardRef<
   const [channelData, setChannelData] =
     useState<DataWithScrollModifier<DisplayEntry> | null>(null);
   const [loading, setLoading] = useState(true);
-  const { setEntries, reset } = useEntries();
+  const { setEntries, reset, entries: rawEntries } = useEntries();
   const pendingUpdateRef = useRef<{
     entries: PatchTypeWithKey[];
     addType: AddEntryType;
@@ -464,9 +466,19 @@ export const ConversationList = forwardRef<
   // Determine if content is ready to show (has data or finished loading)
   const hasContent = !loading;
 
+  const teamStatus = useTeamStatus(rawEntries);
+  const hasActiveTeams = Array.from(teamStatus.values()).some(
+    (t) => !t.deleted
+  );
+
   return (
     <ApprovalFormProvider>
       <div className="h-full relative">
+        {hasActiveTeams && (
+          <div className="sticky top-0 z-20 bg-primary border-b border-border">
+            <TeamStatusIndicator teams={teamStatus} />
+          </div>
+        )}
         <div
           className={cn(
             'absolute inset-0 transition-opacity duration-300 z-10',

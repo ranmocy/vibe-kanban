@@ -254,6 +254,8 @@ export type PersistKey =
   | `tool:${string}`
   | `todo:${string}`
   | `subagent:${string}`
+  | `team:${string}`
+  | `agentmsg:${string}`
   | `user:${string}`
   | `system:${string}`
   | `error:${string}`
