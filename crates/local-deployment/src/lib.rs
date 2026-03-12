@@ -291,32 +291,15 @@ impl LocalDeployment {
     }
 
     pub async fn get_login_status(&self) -> LoginStatus {
-        if self.auth_context.get_credentials().await.is_none() {
-            self.auth_context.clear_profile().await;
-            return LoginStatus::LoggedOut;
-        };
-
-        if let Some(cached_profile) = self.auth_context.cached_profile().await {
-            return LoginStatus::LoggedIn {
-                profile: cached_profile,
-            };
-        }
-
-        let Ok(client) = self.remote_client() else {
-            return LoginStatus::LoggedOut;
-        };
-
-        match client.profile().await {
-            Ok(profile) => {
-                self.auth_context.set_profile(profile.clone()).await;
-                LoginStatus::LoggedIn { profile }
-            }
-            Err(RemoteClientError::Auth) => {
-                let _ = self.auth_context.clear_credentials().await;
-                self.auth_context.clear_profile().await;
-                LoginStatus::LoggedOut
-            }
-            Err(_) => LoginStatus::LoggedOut,
+        // Always return logged in with a local user profile — no remote auth needed
+        LoginStatus::LoggedIn {
+            profile: api_types::ProfileResponse {
+                user_id: uuid::Uuid::parse_str("00000000-0000-0000-0000-000000000001")
+                    .unwrap(),
+                username: Some("local-user".to_string()),
+                email: "local@vibe-kanban.local".to_string(),
+                providers: vec![],
+            },
         }
     }
 

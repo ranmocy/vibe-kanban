@@ -1,123 +1,79 @@
-import { PROJECTS_SHAPE, type Project } from 'shared/remote-types';
-import { type OrganizationWithRole } from 'shared/types';
-import { organizationsApi } from '@/lib/api';
-import { createShapeCollection } from '@/lib/electric/collections';
+import type { Project } from 'shared/remote-types';
 
 const FIRST_PROJECT_LOOKUP_TIMEOUT_MS = 3000;
 
-function getFirstOrganization(
-  organizations: OrganizationWithRole[]
-): OrganizationWithRole | null {
-  if (organizations.length === 0) {
-    return null;
-  }
+interface OrganizationLike {
+  id: string;
+  is_personal?: boolean;
+}
 
-  const firstNonPersonal = organizations.find(
-    (organization) => !organization.is_personal
-  );
+function getFirstOrganization(
+  organizations: OrganizationLike[]
+): OrganizationLike | null {
+  if (organizations.length === 0) return null;
+  const firstNonPersonal = organizations.find((org) => !org.is_personal);
   return firstNonPersonal ?? organizations[0];
 }
 
 function getFirstProject(projects: Project[]): Project | null {
-  if (projects.length === 0) {
-    return null;
-  }
+  if (projects.length === 0) return null;
 
-  const sortedProjects = [...projects].sort((a, b) => {
-    const aCreatedAt = new Date(a.created_at).getTime();
-    const bCreatedAt = new Date(b.created_at).getTime();
-    if (aCreatedAt !== bCreatedAt) {
-      return aCreatedAt - bCreatedAt;
-    }
-
+  const sorted = [...projects].sort((a, b) => {
+    const aTime = new Date(a.created_at).getTime();
+    const bTime = new Date(b.created_at).getTime();
+    if (aTime !== bTime) return aTime - bTime;
     const nameCompare = a.name.localeCompare(b.name);
-    if (nameCompare !== 0) {
-      return nameCompare;
-    }
-
+    if (nameCompare !== 0) return nameCompare;
     return a.id.localeCompare(b.id);
   });
 
-  return sortedProjects[0];
-}
-
-async function getFirstProjectInOrganization(
-  organizationId: string
-): Promise<Project | null> {
-  const collection = createShapeCollection(PROJECTS_SHAPE, {
-    organization_id: organizationId,
-  });
-
-  if (collection.isReady()) {
-    return getFirstProject(collection.toArray as unknown as Project[]);
-  }
-
-  return new Promise<Project | null>((resolve) => {
-    let settled = false;
-    let timeoutId: number | undefined;
-    let subscription: { unsubscribe: () => void } | undefined;
-
-    const settle = (project: Project | null) => {
-      if (settled) return;
-      settled = true;
-
-      if (timeoutId !== undefined) {
-        window.clearTimeout(timeoutId);
-        timeoutId = undefined;
-      }
-      if (subscription) {
-        subscription.unsubscribe();
-        subscription = undefined;
-      }
-
-      resolve(project);
-    };
-
-    const tryResolve = () => {
-      if (!collection.isReady()) {
-        return;
-      }
-
-      settle(getFirstProject(collection.toArray as unknown as Project[]));
-    };
-
-    subscription = collection.subscribeChanges(tryResolve, {
-      includeInitialState: true,
-    });
-
-    timeoutId = window.setTimeout(() => {
-      settle(null);
-    }, FIRST_PROJECT_LOOKUP_TIMEOUT_MS);
-
-    tryResolve();
-  });
+  return sorted[0];
 }
 
 export async function getFirstProjectDestination(
   setSelectedOrgId: (orgId: string | null) => void
 ): Promise<string | null> {
   try {
-    const organizationsResponse = await organizationsApi.getUserOrganizations();
-    const firstOrganization = getFirstOrganization(
-      organizationsResponse.organizations ?? []
+    const controller = new AbortController();
+    const timeout = setTimeout(
+      () => controller.abort(),
+      FIRST_PROJECT_LOOKUP_TIMEOUT_MS
     );
 
-    if (!firstOrganization) {
+    // Fetch organizations from local backend
+    const orgsRes = await fetch('/api/kanban/organizations', {
+      signal: controller.signal,
+    });
+    if (!orgsRes.ok) {
+      clearTimeout(timeout);
+      return null;
+    }
+    const organizations: OrganizationLike[] = await orgsRes.json();
+    const firstOrg = getFirstOrganization(organizations);
+    if (!firstOrg) {
+      clearTimeout(timeout);
       return null;
     }
 
-    setSelectedOrgId(firstOrganization.id);
+    setSelectedOrgId(firstOrg.id);
 
-    const firstProject = await getFirstProjectInOrganization(
-      firstOrganization.id
+    // Fetch projects from local backend
+    const projRes = await fetch(
+      `/api/kanban/organizations/${firstOrg.id}/projects`,
+      { signal: controller.signal }
     );
-    if (!firstProject) {
-      return null;
-    }
+    clearTimeout(timeout);
+    if (!projRes.ok) return null;
+    const projects: Project[] = await projRes.json();
+
+    const firstProject = getFirstProject(projects);
+    if (!firstProject) return null;
 
     return `/projects/${firstProject.id}`;
   } catch (error) {
-    console.error('Failed to resolve first project destination:', error);
+    if ((error as Error).name !== 'AbortError') {
+      console.error('Failed to resolve first project destination:', error);
+    }
     return null;
   }
 }

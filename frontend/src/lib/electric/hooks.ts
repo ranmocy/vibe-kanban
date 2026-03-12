@@ -1,8 +1,7 @@
-import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { useLiveQuery } from '@tanstack/react-db';
-import { createShapeCollection } from './collections';
-import { useSyncErrorContext } from '@/contexts/SyncErrorContext';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { generateUuid } from '@/lib/uuid';
+import { makeRequest } from '@/lib/remoteApi';
 import type { MutationDefinition, ShapeDefinition } from 'shared/remote-types';
 import type { SyncError } from './types';
 
@@ -67,7 +66,7 @@ export interface UseShapeOptions<
     | undefined = undefined,
 > {
   /**
-   * Whether to enable the Electric sync subscription.
+   * Whether to enable the data subscription.
    * When false, returns empty data and no-op mutation functions.
    * @default true
    */
@@ -80,23 +79,51 @@ export interface UseShapeOptions<
 }
 
 /**
- * Hook for subscribing to a shape's data via Electric sync,
+ * Build a local API URL from a shape definition URL template and params.
+ * Maps Electric shape URLs to local kanban REST endpoints.
+ */
+function buildLocalUrl(
+  shapeUrl: string,
+  params: Record<string, string>
+): string {
+  // Strip /v1/shape prefix and add /api/kanban prefix
+  let url = shapeUrl.replace(/^\/v1\/shape/, '/api/kanban');
+
+  // Substitute params in URL template
+  for (const [key, value] of Object.entries(params)) {
+    url = url.replace(`{${key}}`, encodeURIComponent(value));
+  }
+
+  // For shapes that use query params instead of URL params, append remaining params
+  // (e.g., notifications need user_id as query param)
+  const remainingParams = Object.entries(params).filter(
+    ([key]) => !shapeUrl.includes(`{${key}}`)
+  );
+  if (remainingParams.length > 0) {
+    const searchParams = new URLSearchParams(remainingParams);
+    url += (url.includes('?') ? '&' : '?') + searchParams.toString();
+  }
+
+  return url;
+}
+
+/**
+ * Build a mutation API URL from a mutation definition URL.
+ * Maps /v1/... to /api/kanban/...
+ */
+function buildMutationUrl(mutationUrl: string): string {
+  return mutationUrl.startsWith('/v1/')
+    ? `/api/kanban/${mutationUrl.slice(4)}`
+    : mutationUrl;
+}
+
+/**
+ * Hook for subscribing to a shape's data via React Query polling,
  * with optional optimistic mutation support.
  *
  * @param shape - The shape definition from shared/remote-types.ts
  * @param params - URL parameters matching the shape's requirements
  * @param options - Optional configuration (enabled, mutation, etc.)
- *
- * @example
- * // Read-only:
- * const { data, isLoading } = useShape(PROJECT_PULL_REQUESTS_SHAPE, { project_id });
- *
- * // With mutations:
- * const { data, insert, update, remove } = useShape(
- *   PROJECT_ISSUES_SHAPE,
- *   { project_id },
- *   { mutation: ISSUE_MUTATION }
- * );
  */
 export function useShape<
   T extends Record<string, unknown>,
@@ -111,20 +138,7 @@ export function useShape<
   ? UseShapeMutationResult<T, MutationCreateType<M>, MutationUpdateType<M>>
   : UseShapeResult<T> {
   const { enabled = true, mutation } = options;
-
   const [error, setError] = useState<SyncError | null>(null);
-  const [retryKey, setRetryKey] = useState(0);
-
-  const syncErrorContext = useSyncErrorContext();
-  const registerErrorFn = syncErrorContext?.registerError;
-  const clearErrorFn = syncErrorContext?.clearError;
-
-  const handleError = useCallback((err: SyncError) => setError(err), []);
-
-  const retry = useCallback(() => {
-    setError(null);
-    setRetryKey((k) => k + 1);
-  }, []);
 
   const paramsKey = JSON.stringify(params);
   const stableParams = useMemo(
@@ -132,41 +146,44 @@ export function useShape<
     [paramsKey]
   );
 
-  const streamId = useMemo(
-    () => `${shape.table}:${paramsKey}`,
-    [shape.table, paramsKey]
+  const url = useMemo(
+    () => buildLocalUrl(shape.url, stableParams),
+    [shape.url, stableParams]
   );
 
-  useEffect(() => {
-    if (error && registerErrorFn) {
-      registerErrorFn(streamId, shape.table, error, retry);
-    } else if (!error && clearErrorFn) {
-      clearErrorFn(streamId);
-    }
-
-    return () => {
-      clearErrorFn?.(streamId);
-    };
-  }, [error, streamId, shape.table, retry, registerErrorFn, clearErrorFn]);
-
-  const collection = useMemo(() => {
-    if (!enabled) return null;
-    const config = { onError: handleError };
-    void retryKey;
-    return createShapeCollection(shape, stableParams, config, mutation);
-  }, [enabled, shape, mutation, handleError, retryKey, stableParams]);
-
-  const { data, isLoading: queryLoading } = useLiveQuery(
-    (query) => (collection ? query.from({ item: collection }) : undefined),
-    [collection]
+  const queryKey = useMemo(
+    () => ['kanban', shape.table, stableParams],
+    [shape.table, stableParams]
   );
+
+  const queryClient = useQueryClient();
+
+  const { data: rawData, isLoading } = useQuery<T[]>({
+    queryKey,
+    queryFn: async () => {
+      const response = await fetch(url);
+      if (!response.ok) {
+        const errMsg = `Failed to fetch ${shape.table}: ${response.status}`;
+        setError({ message: errMsg });
+        throw new Error(errMsg);
+      }
+      setError(null);
+      return response.json();
+    },
+    enabled,
+    refetchInterval: enabled ? 2000 : false,
+    staleTime: 1000,
+  });
 
   const items = useMemo(() => {
-    if (!enabled || !collection || !data || queryLoading) return [];
-    return data as unknown as T[];
-  }, [enabled, collection, data, queryLoading]);
+    if (!enabled || !rawData) return [];
+    return rawData;
+  }, [enabled, rawData]);
 
-  const isLoading = enabled ? queryLoading : false;
+  const retry = useCallback(() => {
+    setError(null);
+    queryClient.invalidateQueries({ queryKey });
+  }, [queryClient, queryKey]);
 
   // --- Mutation support (only used when mutation is provided) ---
 
@@ -175,17 +192,10 @@ export function useShape<
     itemsRef.current = items;
   }, [items]);
 
-  type TransactionResult = { isPersisted: { promise: Promise<void> } };
-  type CollectionWithMutations = {
-    insert: (data: unknown) => TransactionResult;
-    update: (
-      id: string,
-      updater: (draft: Record<string, unknown>) => void
-    ) => TransactionResult;
-    delete: (id: string) => TransactionResult;
-  };
-  const typedCollection =
-    collection as unknown as CollectionWithMutations | null;
+  const mutationUrl = useMemo(
+    () => (mutation ? buildMutationUrl(mutation.url) : ''),
+    [mutation]
+  );
 
   const insert = useCallback(
     (insertData: unknown): InsertResult<T> => {
@@ -193,53 +203,107 @@ export function useShape<
         id: generateUuid(),
         ...(insertData as Record<string, unknown>),
       };
-      if (!typedCollection) {
-        return {
-          data: dataWithId as unknown as T,
-          persisted: Promise.resolve(dataWithId as unknown as T),
-        };
-      }
-      const tx = typedCollection.insert(dataWithId);
+
+      // Optimistic update
+      queryClient.setQueryData<T[]>(queryKey, (old) => [
+        ...(old || []),
+        dataWithId as unknown as T,
+      ]);
+
+      const persisted = (async () => {
+        try {
+          const response = await makeRequest(mutationUrl, {
+            method: 'POST',
+            body: JSON.stringify(dataWithId),
+          });
+          if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.message || 'Failed to create');
+          }
+          const result = await response.json();
+          // Invalidate to get the server's version
+          queryClient.invalidateQueries({ queryKey });
+          return (result.data ?? dataWithId) as unknown as T;
+        } catch (e) {
+          queryClient.invalidateQueries({ queryKey });
+          throw e;
+        }
+      })();
+
       return {
         data: dataWithId as unknown as T,
-        persisted: tx.isPersisted.promise.then(() => {
-          const synced = itemsRef.current.find(
-            (item) => (item as unknown as { id: string }).id === dataWithId.id
-          );
-          return (synced ?? dataWithId) as unknown as T;
-        }),
+        persisted,
       };
     },
-    [typedCollection]
+    [queryClient, queryKey, mutationUrl]
   );
 
   const update = useCallback(
     (id: string, changes: unknown): MutationResult => {
-      if (!typedCollection) {
-        return { persisted: Promise.resolve() };
-      }
-      const tx = typedCollection.update(id, (draft: Record<string, unknown>) =>
-        Object.assign(draft, changes)
+      // Optimistic update
+      queryClient.setQueryData<T[]>(queryKey, (old) =>
+        (old || []).map((item) =>
+          (item as unknown as { id: string }).id === id
+            ? { ...item, ...(changes as Record<string, unknown>) }
+            : item
+        )
       );
-      return { persisted: tx.isPersisted.promise };
+
+      const persisted = (async () => {
+        try {
+          const response = await makeRequest(`${mutationUrl}/${id}`, {
+            method: 'PATCH',
+            body: JSON.stringify(changes),
+          });
+          if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.message || 'Failed to update');
+          }
+          queryClient.invalidateQueries({ queryKey });
+        } catch (e) {
+          queryClient.invalidateQueries({ queryKey });
+          throw e;
+        }
+      })();
+
+      return { persisted };
     },
-    [typedCollection]
+    [queryClient, queryKey, mutationUrl]
   );
 
   const remove = useCallback(
     (id: string): MutationResult => {
-      if (!typedCollection) {
-        return { persisted: Promise.resolve() };
-      }
-      const tx = typedCollection.delete(id);
-      return { persisted: tx.isPersisted.promise };
+      // Optimistic update
+      queryClient.setQueryData<T[]>(queryKey, (old) =>
+        (old || []).filter(
+          (item) => (item as unknown as { id: string }).id !== id
+        )
+      );
+
+      const persisted = (async () => {
+        try {
+          const response = await makeRequest(`${mutationUrl}/${id}`, {
+            method: 'DELETE',
+          });
+          if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.message || 'Failed to delete');
+          }
+          queryClient.invalidateQueries({ queryKey });
+        } catch (e) {
+          queryClient.invalidateQueries({ queryKey });
+          throw e;
+        }
+      })();
+
+      return { persisted };
     },
-    [typedCollection]
+    [queryClient, queryKey, mutationUrl]
   );
 
   const base: UseShapeResult<T> = {
     data: items,
-    isLoading,
+    isLoading: enabled ? isLoading : false,
     error,
     retry,
   };

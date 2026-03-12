@@ -1,20 +1,27 @@
-import { useQuery } from '@tanstack/react-query';
-import { organizationsApi } from '../lib/api';
-import { useUserSystem } from '@/components/ConfigProvider';
-import type { ListOrganizationsResponse } from 'shared/types';
+import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { organizationKeys } from './organizationKeys';
+import type { ListOrganizationsResponse } from 'shared/types';
 
 /**
- * Hook to fetch all organizations that the current user is a member of
+ * Hook to fetch all organizations from the local kanban backend
  */
-export function useUserOrganizations() {
-  const { loginStatus } = useUserSystem();
-  const isLoggedIn = loginStatus?.status === 'loggedin';
-
-  return useQuery<ListOrganizationsResponse>({
+export function useUserOrganizations(): UseQueryResult<ListOrganizationsResponse> {
+  return useQuery({
     queryKey: organizationKeys.userList(),
-    queryFn: () => organizationsApi.getUserOrganizations(),
-    enabled: Boolean(isLoggedIn),
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    queryFn: async (): Promise<ListOrganizationsResponse> => {
+      const res = await fetch('/api/kanban/organizations');
+      if (!res.ok) throw new Error('Failed to fetch organizations');
+      const orgs = await res.json();
+      // The local backend returns a plain array; wrap to match expected shape
+      // and add user_role since we're always admin locally
+      const organizations = (Array.isArray(orgs) ? orgs : []).map(
+        (org: Record<string, unknown>) => ({
+          ...org,
+          user_role: org.user_role ?? 'ADMIN',
+        })
+      );
+      return { organizations } as ListOrganizationsResponse;
+    },
+    staleTime: 5 * 60 * 1000,
   });
 }

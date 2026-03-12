@@ -7,7 +7,7 @@ import { useOrganizationStore } from '@/stores/useOrganizationStore';
 const DEFAULT_DESTINATION = '/workspaces/create';
 
 export function RootRedirectPage() {
-  const { config, loading, loginStatus } = useUserSystem();
+  const { config, loading } = useUserSystem();
   const setSelectedOrgId = useOrganizationStore((s) => s.setSelectedOrgId);
   const [destination, setDestination] = useState<string | null>(null);
 
@@ -15,20 +15,14 @@ export function RootRedirectPage() {
     let cancelled = false;
 
     const resolveDestination = async () => {
-      if (loading || !config) {
-        return;
-      }
+      if (loading || !config) return;
 
       if (!config.remote_onboarding_acknowledged) {
         setDestination('/onboarding');
         return;
       }
 
-      if (loginStatus?.status !== 'loggedin') {
-        setDestination(DEFAULT_DESTINATION);
-        return;
-      }
-
+      // Always try to find first project — no login check needed
       const firstProjectDestination =
         await getFirstProjectDestination(setSelectedOrgId);
       if (!cancelled) {
@@ -37,11 +31,10 @@ export function RootRedirectPage() {
     };
 
     void resolveDestination();
-
     return () => {
       cancelled = true;
     };
-  }, [config, loading, loginStatus?.status, setSelectedOrgId]);
+  }, [config, loading, setSelectedOrgId]);
 
   if (loading || !config || !destination) {
     return (

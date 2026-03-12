@@ -1,23 +1,14 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { oauthApi } from '@/lib/api';
-import { useEffect } from 'react';
-import { useAuth } from '@/hooks/auth/useAuth';
+import { useQuery } from '@tanstack/react-query';
 
 export function useCurrentUser() {
-  const { isSignedIn } = useAuth();
-  const query = useQuery({
+  return useQuery({
     queryKey: ['auth', 'user'],
-    queryFn: () => oauthApi.getCurrentUser(),
-    retry: 2,
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
+    queryFn: async () => ({
+      user_id: '00000000-0000-0000-0000-000000000001',
+      email: 'local@vibe-kanban.local',
+      first_name: 'Local',
+      last_name: 'User',
+    }),
+    staleTime: Infinity,
   });
-
-  const queryClient = useQueryClient();
-  useEffect(() => {
-    queryClient.invalidateQueries({ queryKey: ['auth', 'user'] });
-  }, [queryClient, isSignedIn]);
-
-  return query;
 }

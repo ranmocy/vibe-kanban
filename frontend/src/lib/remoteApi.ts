@@ -2,51 +2,32 @@ import type {
   UpdateIssueRequest,
   UpdateProjectStatusRequest,
 } from 'shared/remote-types';
-import { tokenManager } from './auth/tokenManager';
 
-export const REMOTE_API_URL = import.meta.env.VITE_VK_SHARED_API_BASE || '';
+// No longer need a remote API URL - everything is local
+export const REMOTE_API_URL = '';
 
 export const makeRequest = async (
   path: string,
   options: RequestInit = {},
-  retryOn401 = true
 ): Promise<Response> => {
-  const token = await tokenManager.getToken();
-  if (!token) {
-    throw new Error('Not authenticated');
-  }
-
   const headers = new Headers(options.headers ?? {});
   if (!headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
   }
-  headers.set('Authorization', `Bearer ${token}`);
-  headers.set('X-Client-Version', __APP_VERSION__);
-  headers.set('X-Client-Type', 'frontend');
 
-  const response = await fetch(`${REMOTE_API_URL}${path}`, {
+  // Route mutations through local backend
+  // The mutation URLs from remote-types.ts are like '/v1/issues'
+  // Map them to local: '/api/kanban/issues'
+  const localPath = path.startsWith('/v1/')
+    ? `/api/kanban/${path.slice(4)}`
+    : path.startsWith('/api/')
+      ? path
+      : `/api/kanban${path}`;
+
+  return fetch(localPath, {
     ...options,
     headers,
-    credentials: 'include',
   });
-
-  // Handle 401 - token may have expired
-  if (response.status === 401 && retryOn401) {
-    const newToken = await tokenManager.triggerRefresh();
-    if (newToken) {
-      // Retry the request with the new token
-      headers.set('Authorization', `Bearer ${newToken}`);
-      return fetch(`${REMOTE_API_URL}${path}`, {
-        ...options,
-        headers,
-        credentials: 'include',
-      });
-    }
-    // Refresh failed, throw an auth error
-    throw new Error('Session expired. Please log in again.');
-  }
-
-  return response;
 };
 
 export interface BulkUpdateIssueItem {
@@ -57,7 +38,7 @@ export interface BulkUpdateIssueItem {
 export async function bulkUpdateIssues(
   updates: BulkUpdateIssueItem[]
 ): Promise<void> {
-  const response = await makeRequest('/v1/issues/bulk', {
+  const response = await makeRequest('/api/kanban/issues/bulk', {
     method: 'POST',
     body: JSON.stringify({
       updates: updates.map((u) => ({ id: u.id, ...u.changes })),
@@ -77,7 +58,7 @@ export interface BulkUpdateProjectStatusItem {
 export async function bulkUpdateProjectStatuses(
   updates: BulkUpdateProjectStatusItem[]
 ): Promise<void> {
-  const response = await makeRequest('/v1/project_statuses/bulk', {
+  const response = await makeRequest('/api/kanban/project_statuses/bulk', {
     method: 'POST',
     body: JSON.stringify({
       updates: updates.map((u) => ({ id: u.id, ...u.changes })),

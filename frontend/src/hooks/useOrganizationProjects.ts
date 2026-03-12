@@ -1,21 +1,32 @@
-import { useShape } from '@/lib/electric/hooks';
-import { PROJECTS_SHAPE } from 'shared/remote-types';
-import { useAuth } from '@/hooks/auth/useAuth';
+import { useQuery } from '@tanstack/react-query';
+
+interface ProjectItem {
+  id: string;
+  organization_id: string;
+  name: string;
+  color: string;
+  created_at: string;
+  updated_at: string;
+}
 
 export function useOrganizationProjects(organizationId: string | null) {
-  const { isSignedIn } = useAuth();
+  const enabled = !!organizationId;
 
-  // Only subscribe to Electric when signed in AND have an org
-  const enabled = isSignedIn && !!organizationId;
-
-  const { data, isLoading, error } = useShape(
-    PROJECTS_SHAPE,
-    { organization_id: organizationId || '' },
-    { enabled }
-  );
+  const { data, isLoading, error } = useQuery<ProjectItem[]>({
+    queryKey: ['kanban', 'projects', organizationId],
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/kanban/organizations/${organizationId}/projects`
+      );
+      if (!res.ok) throw new Error('Failed to fetch projects');
+      return res.json();
+    },
+    enabled,
+    refetchInterval: 5000,
+  });
 
   return {
-    data,
+    data: data || [],
     isLoading,
     isError: !!error,
     error,
