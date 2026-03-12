@@ -1,7 +1,7 @@
 use deployment::Deployment;
 use axum::{
     Router,
-    extract::{Json, Path, State},
+    extract::{Json, Path, Query, State},
     http::StatusCode,
     response::Json as ResponseJson,
     routing::{get, post},
@@ -38,10 +38,15 @@ struct UpdateProjectRequest {
     color: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+struct ListProjectsQuery {
+    organization_id: String,
+}
+
 pub fn router() -> Router<DeploymentImpl> {
     Router::new()
         .route("/kanban/organizations/{org_id}/projects", get(list_projects))
-        .route("/kanban/projects", post(create_project))
+        .route("/kanban/projects", get(list_projects_by_query).post(create_project))
         .route("/kanban/projects/{id}", get(get_project).patch(update_project).delete(delete_project))
 }
 
@@ -49,12 +54,26 @@ async fn list_projects(
     State(deployment): State<DeploymentImpl>,
     Path(org_id): Path<String>,
 ) -> Result<ResponseJson<Vec<Project>>, StatusCode> {
+    list_projects_impl(&deployment, &org_id).await
+}
+
+async fn list_projects_by_query(
+    State(deployment): State<DeploymentImpl>,
+    Query(query): Query<ListProjectsQuery>,
+) -> Result<ResponseJson<Vec<Project>>, StatusCode> {
+    list_projects_impl(&deployment, &query.organization_id).await
+}
+
+async fn list_projects_impl(
+    deployment: &DeploymentImpl,
+    org_id: &str,
+) -> Result<ResponseJson<Vec<Project>>, StatusCode> {
     let pool = &deployment.db().pool;
     let projects = sqlx::query_as::<_, Project>(
         "SELECT id, organization_id, name, color, issue_counter, created_at, updated_at \
          FROM kanban_projects WHERE organization_id = ?",
     )
-    .bind(&org_id)
+    .bind(org_id)
     .fetch_all(pool)
     .await
     .map_err(|e| {

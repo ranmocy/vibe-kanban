@@ -60,7 +60,6 @@ import {
   StatusResponse,
   ListOrganizationsResponse,
   OrganizationMemberWithProfile,
-  ListMembersResponse,
   CreateOrganizationRequest,
   CreateOrganizationResponse,
   CreateInvitationRequest,
@@ -1275,9 +1274,9 @@ export const organizationsApi = {
   getMembers: async (
     orgId: string
   ): Promise<OrganizationMemberWithProfile[]> => {
-    const response = await makeRequest(`/api/organizations/${orgId}/members`);
-    const result = await handleApiResponse<ListMembersResponse>(response);
-    return result.members;
+    const response = await fetch(`/api/kanban/organizations/${orgId}/members`);
+    if (!response.ok) return [];
+    return response.json();
   },
 
   getUserOrganizations: async (): Promise<ListOrganizationsResponse> => {

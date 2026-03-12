@@ -81,6 +81,9 @@ export interface UseShapeOptions<
 /**
  * Build a local API URL from a shape definition URL template and params.
  * Maps Electric shape URLs to local kanban REST endpoints.
+ *
+ * Organization-scoped shapes (e.g. /v1/shape/projects with organization_id param)
+ * are mapped to nested REST paths: /api/kanban/organizations/{org_id}/projects
  */
 function buildLocalUrl(
   shapeUrl: string,
@@ -94,12 +97,29 @@ function buildLocalUrl(
     url = url.replace(`{${key}}`, encodeURIComponent(value));
   }
 
-  // For shapes that use query params instead of URL params, append remaining params
-  // (e.g., notifications need user_id as query param)
+  // Find params that weren't substituted in the URL template
   const remainingParams = Object.entries(params).filter(
     ([key]) => !shapeUrl.includes(`{${key}}`)
   );
-  if (remainingParams.length > 0) {
+
+  // If organization_id is a remaining param, nest under /organizations/{org_id}/
+  const orgEntry = remainingParams.find(([key]) => key === 'organization_id');
+  if (orgEntry) {
+    const [, orgId] = orgEntry;
+    url = url.replace(
+      '/api/kanban/',
+      `/api/kanban/organizations/${encodeURIComponent(orgId)}/`
+    );
+
+    // Add remaining params (excluding organization_id) as query params
+    const queryParams = remainingParams.filter(
+      ([key]) => key !== 'organization_id'
+    );
+    if (queryParams.length > 0) {
+      const searchParams = new URLSearchParams(queryParams);
+      url += (url.includes('?') ? '&' : '?') + searchParams.toString();
+    }
+  } else if (remainingParams.length > 0) {
     const searchParams = new URLSearchParams(remainingParams);
     url += (url.includes('?') ? '&' : '?') + searchParams.toString();
   }

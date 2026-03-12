@@ -235,7 +235,10 @@ async fn create_issue(
     .execute(&mut *tx)
     .await
     .map_err(|e| {
-        tracing::error!("Failed to create issue: {}", e);
+        tracing::error!(
+            "Failed to create issue: {} (project_id={}, status_id={}, parent_issue_id={:?})",
+            e, req.project_id, req.status_id, req.parent_issue_id
+        );
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 

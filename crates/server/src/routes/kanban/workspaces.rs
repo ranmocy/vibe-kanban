@@ -1,7 +1,7 @@
 use deployment::Deployment;
 use axum::{
     Router,
-    extract::{Json, Path, State},
+    extract::{Json, Path, Query, State},
     http::StatusCode,
     response::Json as ResponseJson,
     routing::{get, post},
@@ -58,6 +58,7 @@ const WS_COLUMNS: &str = "id, project_id, owner_user_id, issue_id, local_workspa
 pub fn router() -> Router<DeploymentImpl> {
     Router::new()
         .route("/kanban/project/{project_id}/workspaces", get(list_workspaces))
+        .route("/kanban/user/workspaces", get(list_user_workspaces))
         .route("/kanban/workspaces", post(create_workspace))
         .route("/kanban/workspaces/{id}", get(get_workspace).patch(update_workspace).delete(delete_workspace))
 }
@@ -79,6 +80,38 @@ async fn list_workspaces(
             tracing::error!("Failed to list workspaces: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
+    Ok(ResponseJson(workspaces))
+}
+
+#[derive(Debug, Deserialize)]
+struct ListUserWorkspacesQuery {
+    owner_user_id: Option<String>,
+}
+
+async fn list_user_workspaces(
+    State(deployment): State<DeploymentImpl>,
+    Query(query): Query<ListUserWorkspacesQuery>,
+) -> Result<ResponseJson<Vec<KanbanWorkspace>>, StatusCode> {
+    let pool = &deployment.db().pool;
+    let workspaces = if let Some(owner_user_id) = &query.owner_user_id {
+        let q = format!(
+            "SELECT {} FROM kanban_workspaces WHERE owner_user_id = ?",
+            WS_COLUMNS
+        );
+        sqlx::query_as::<_, KanbanWorkspace>(&q)
+            .bind(owner_user_id)
+            .fetch_all(pool)
+            .await
+    } else {
+        let q = format!("SELECT {} FROM kanban_workspaces", WS_COLUMNS);
+        sqlx::query_as::<_, KanbanWorkspace>(&q)
+            .fetch_all(pool)
+            .await
+    }
+    .map_err(|e| {
+        tracing::error!("Failed to list user workspaces: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
     Ok(ResponseJson(workspaces))
 }
 

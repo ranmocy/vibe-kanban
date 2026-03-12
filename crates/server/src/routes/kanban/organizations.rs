@@ -37,6 +37,8 @@ pub fn router() -> Router<DeploymentImpl> {
     Router::new()
         .route("/kanban/organizations", get(list_organizations).post(create_organization))
         .route("/kanban/organizations/{id}", get(get_organization))
+        .route("/kanban/organizations/{org_id}/organization_members", get(list_organization_members))
+        .route("/kanban/organizations/{org_id}/members", get(list_members_with_profiles))
 }
 
 async fn list_organizations(
@@ -111,4 +113,65 @@ async fn create_organization(
     })?;
 
     Ok(ResponseJson(MutationResponse { data: org, txid: 1 }))
+}
+
+#[derive(Debug, Serialize, FromRow)]
+struct OrganizationMember {
+    organization_id: String,
+    user_id: String,
+    role: String,
+    joined_at: String,
+    last_seen_at: Option<String>,
+}
+
+async fn list_organization_members(
+    State(deployment): State<DeploymentImpl>,
+    Path(org_id): Path<String>,
+) -> Result<ResponseJson<Vec<OrganizationMember>>, StatusCode> {
+    let pool = &deployment.db().pool;
+    let members = sqlx::query_as::<_, OrganizationMember>(
+        "SELECT organization_id, user_id, role, joined_at, last_seen_at \
+         FROM kanban_organization_members WHERE organization_id = ?",
+    )
+    .bind(&org_id)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| {
+        tracing::error!("Failed to list organization members: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+    Ok(ResponseJson(members))
+}
+
+#[derive(Debug, Serialize, FromRow)]
+struct MemberWithProfile {
+    user_id: String,
+    role: String,
+    joined_at: String,
+    first_name: Option<String>,
+    last_name: Option<String>,
+    username: Option<String>,
+    email: Option<String>,
+}
+
+async fn list_members_with_profiles(
+    State(deployment): State<DeploymentImpl>,
+    Path(org_id): Path<String>,
+) -> Result<ResponseJson<Vec<MemberWithProfile>>, StatusCode> {
+    let pool = &deployment.db().pool;
+    let members = sqlx::query_as::<_, MemberWithProfile>(
+        "SELECT m.user_id, m.role, m.joined_at, \
+         u.first_name, u.last_name, u.username, u.email \
+         FROM kanban_organization_members m \
+         LEFT JOIN kanban_users u ON m.user_id = u.id \
+         WHERE m.organization_id = ?",
+    )
+    .bind(&org_id)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| {
+        tracing::error!("Failed to list members with profiles: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+    Ok(ResponseJson(members))
 }

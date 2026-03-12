@@ -17,9 +17,8 @@ import {
   type UpdateProjectRequest,
   type UpdateNotificationRequest,
 } from 'shared/remote-types';
-import type { OrganizationMemberWithProfile } from 'shared/types';
+import type { OrganizationMemberWithProfile, MemberRole } from 'shared/types';
 import type { SyncError } from '@/lib/electric/types';
-import { organizationsApi } from '@/lib/api';
 import { organizationKeys } from '@/hooks/organizationKeys';
 
 /**
@@ -90,10 +89,39 @@ export function OrgProvider({ organizationId, children }: OrgProviderProps) {
     { enabled, mutation: NOTIFICATION_MUTATION }
   );
 
-  // Members data from API
+  // Members data from local kanban API (joins members + users)
   const membersQuery = useQuery({
     queryKey: organizationKeys.members(organizationId),
-    queryFn: () => organizationsApi.getMembers(organizationId),
+    queryFn: async (): Promise<OrganizationMemberWithProfile[]> => {
+      const [membersRes, usersRes] = await Promise.all([
+        fetch(
+          `/api/kanban/organizations/${organizationId}/organization_members`
+        ),
+        fetch(`/api/kanban/organizations/${organizationId}/users`),
+      ]);
+      if (!membersRes.ok || !usersRes.ok) return [];
+      const members = await membersRes.json();
+      const users = await usersRes.json();
+      const usersById = new Map<string, Record<string, unknown>>();
+      for (const u of users) {
+        usersById.set(u.id, u);
+      }
+      return members.map(
+        (m: Record<string, unknown>): OrganizationMemberWithProfile => {
+          const user = usersById.get(m.user_id as string);
+          return {
+            user_id: m.user_id as string,
+            role: ((m.role as string) ?? 'MEMBER') as MemberRole,
+            joined_at: (m.joined_at as string) ?? '',
+            first_name: (user?.first_name as string) ?? null,
+            last_name: (user?.last_name as string) ?? null,
+            username: (user?.username as string) ?? null,
+            email: (user?.email as string) ?? null,
+            avatar_url: null,
+          };
+        }
+      );
+    },
     enabled: Boolean(organizationId),
     staleTime: 5 * 60 * 1000, // 5 minutes
   });

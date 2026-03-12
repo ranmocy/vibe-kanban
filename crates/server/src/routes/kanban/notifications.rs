@@ -28,6 +28,8 @@ struct Notification {
 
 #[derive(Debug, Deserialize)]
 struct ListNotificationsQuery {
+    #[serde(default)]
+    organization_id: Option<String>,
     user_id: String,
 }
 
@@ -42,6 +44,7 @@ const NOTIF_COLUMNS: &str = "id, organization_id, user_id, notification_type, pa
 pub fn router() -> Router<DeploymentImpl> {
     Router::new()
         .route("/kanban/organizations/{org_id}/notifications", get(list_notifications))
+        .route("/kanban/notifications", get(list_notifications_by_query))
         .route("/kanban/notifications/{id}", get(get_notification).patch(update_notification))
 }
 
@@ -50,14 +53,30 @@ async fn list_notifications(
     Path(org_id): Path<String>,
     Query(query): Query<ListNotificationsQuery>,
 ) -> Result<ResponseJson<Vec<Notification>>, StatusCode> {
+    list_notifications_impl(&deployment, &org_id, &query.user_id).await
+}
+
+async fn list_notifications_by_query(
+    State(deployment): State<DeploymentImpl>,
+    Query(query): Query<ListNotificationsQuery>,
+) -> Result<ResponseJson<Vec<Notification>>, StatusCode> {
+    let org_id = query.organization_id.unwrap_or_default();
+    list_notifications_impl(&deployment, &org_id, &query.user_id).await
+}
+
+async fn list_notifications_impl(
+    deployment: &DeploymentImpl,
+    org_id: &str,
+    user_id: &str,
+) -> Result<ResponseJson<Vec<Notification>>, StatusCode> {
     let pool = &deployment.db().pool;
     let q = format!(
         "SELECT {} FROM kanban_notifications WHERE organization_id = ? AND user_id = ? ORDER BY created_at DESC",
         NOTIF_COLUMNS
     );
     let notifications = sqlx::query_as::<_, Notification>(&q)
-        .bind(&org_id)
-        .bind(&query.user_id)
+        .bind(org_id)
+        .bind(user_id)
         .fetch_all(pool)
         .await
         .map_err(|e| {
