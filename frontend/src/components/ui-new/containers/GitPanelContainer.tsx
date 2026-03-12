@@ -1,8 +1,10 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useActions } from '@/contexts/ActionsContext';
 import { usePush } from '@/hooks/usePush';
 import { useRenameBranch } from '@/hooks/useRenameBranch';
 import { useBranchStatus } from '@/hooks/useBranchStatus';
+import { attemptsApi } from '@/lib/api';
 import { ConfirmDialog } from '@/components/ui-new/dialogs/ConfirmDialog';
 import { ForcePushDialog } from '@/components/dialogs/git/ForcePushDialog';
 import { CommandBarDialog } from '@/components/ui-new/dialogs/CommandBarDialog';
@@ -227,6 +229,57 @@ export function GitPanelContainer({
     [pushMutation]
   );
 
+  // Rebase all repos that are behind their target branch
+  const queryClient = useQueryClient();
+  const [isRebasingAll, setIsRebasingAll] = useState(false);
+
+  const hasReposToRebase = repoInfos.some((r) => r.commitsBehind > 0);
+
+  const handleRebaseAll = useCallback(async () => {
+    if (!selectedWorkspace?.id || isRebasingAll) return;
+
+    const reposToRebase = repoInfos.filter((r) => r.commitsBehind > 0);
+    if (reposToRebase.length === 0) return;
+
+    setIsRebasingAll(true);
+    try {
+      for (const repo of reposToRebase) {
+        const result = await attemptsApi.rebase(selectedWorkspace.id, {
+          repo_id: repo.id,
+          old_base_branch: repo.targetBranch,
+          new_base_branch: repo.targetBranch,
+        });
+        if (!result.success) {
+          const err = result.error;
+          if (err?.type === 'merge_conflicts') {
+            await ConfirmDialog.show({
+              title: 'Rebase Conflicts',
+              message: `Conflicts in ${repo.name}. Please resolve them manually.`,
+              confirmText: 'OK',
+              showCancelButton: false,
+              variant: 'destructive',
+            });
+          } else {
+            await ConfirmDialog.show({
+              title: 'Rebase Failed',
+              message: `Failed to rebase ${repo.name}.`,
+              confirmText: 'OK',
+              showCancelButton: false,
+              variant: 'destructive',
+            });
+          }
+          break;
+        }
+      }
+    } finally {
+      setIsRebasingAll(false);
+      const wsId = selectedWorkspace.id;
+      queryClient.invalidateQueries({ queryKey: ['branchStatus', wsId] });
+      queryClient.invalidateQueries({ queryKey: ['taskAttempt', wsId] });
+      queryClient.invalidateQueries({ queryKey: ['attemptRepo', wsId] });
+    }
+  }, [selectedWorkspace?.id, isRebasingAll, repoInfos, queryClient]);
+
   return (
     <GitPanel
       repos={repoInfosWithPushButton}
@@ -236,6 +289,9 @@ export function GitPanelContainer({
       onPushClick={handlePushClick}
       onMoreClick={handleMoreClick}
       onAddRepo={() => console.log('Add repo clicked')}
+      onRebaseAll={handleRebaseAll}
+      isRebasingAll={isRebasingAll}
+      hasReposToRebase={hasReposToRebase}
     />
   );
 }

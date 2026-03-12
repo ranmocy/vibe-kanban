@@ -1,4 +1,4 @@
-import { GitBranchIcon } from '@phosphor-icons/react';
+import { GitBranchIcon, ArrowsClockwiseIcon } from '@phosphor-icons/react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import {
@@ -33,6 +33,9 @@ interface GitPanelProps {
   onPushClick?: (repoId: string) => void;
   onMoreClick?: (repoId: string) => void;
   onAddRepo?: () => void;
+  onRebaseAll?: () => void;
+  isRebasingAll?: boolean;
+  hasReposToRebase?: boolean;
   className?: string;
   error?: string | null;
 }
@@ -44,6 +47,9 @@ export function GitPanel({
   onActionsClick,
   onPushClick,
   onMoreClick,
+  onRebaseAll,
+  isRebasingAll,
+  hasReposToRebase,
   className,
   error,
 }: GitPanelProps) {
@@ -58,6 +64,21 @@ export function GitPanel({
     >
       {error && <ErrorAlert message={error} />}
       <div className="gap-base px-base">
+        {hasReposToRebase && (
+          <div className="flex justify-end py-half">
+            <button
+              type="button"
+              onClick={onRebaseAll}
+              disabled={isRebasingAll}
+              className="flex items-center gap-1 px-base py-half rounded text-sm text-low hover:text-normal bg-secondary hover:bg-primary border border-transparent hover:border-current transition-colors disabled:opacity-50"
+            >
+              <ArrowsClockwiseIcon
+                className={`size-icon-sm ${isRebasingAll ? 'animate-spin' : ''}`}
+              />
+              <span>{isRebasingAll ? 'Rebasing…' : 'Rebase All'}</span>
+            </button>
+          </div>
+        )}
         {repos.map((repo) => (
           <RepoCard
             key={repo.id}
