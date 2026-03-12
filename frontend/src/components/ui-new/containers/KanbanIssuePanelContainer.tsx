@@ -689,6 +689,7 @@ export function KanbanIssuePanelContainer() {
   // Submit handler
   const handleSubmit = useCallback(async () => {
     if (!displayData.title.trim()) return;
+    if (!displayData.statusId) return;
 
     setIsSubmitting(true);
     try {

@@ -112,6 +112,11 @@ async fn create_project(
     let color = req.color.unwrap_or_else(|| "#6366f1".to_string());
     let now = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string();
 
+    let mut tx = pool.begin().await.map_err(|e| {
+        tracing::error!("Failed to begin transaction: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
     sqlx::query(
         "INSERT INTO kanban_projects (id, organization_id, name, color, issue_counter, created_at, updated_at) \
          VALUES (?, ?, ?, ?, 0, ?, ?)",
@@ -122,10 +127,47 @@ async fn create_project(
     .bind(&color)
     .bind(&now)
     .bind(&now)
-    .execute(pool)
+    .execute(&mut *tx)
     .await
     .map_err(|e| {
         tracing::error!("Failed to create project: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    // Seed default statuses for the new project
+    let default_statuses: &[(&str, &str, i32, bool)] = &[
+        ("Backlog", "#6b7280", 0, false),
+        ("Todo", "#3b82f6", 1, false),
+        ("In Progress", "#f59e0b", 2, false),
+        ("In Review", "#8b5cf6", 3, false),
+        ("Done", "#10b981", 4, false),
+        ("Cancelled", "#ef4444", 5, true),
+    ];
+
+    for (name, status_color, sort_order, hidden) in default_statuses {
+        let status_id = Uuid::new_v4().to_string();
+        sqlx::query(
+            "INSERT INTO kanban_statuses (id, project_id, name, color, sort_order, hidden, created_at, updated_at) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(&status_id)
+        .bind(&id)
+        .bind(name)
+        .bind(status_color)
+        .bind(sort_order)
+        .bind(hidden)
+        .bind(&now)
+        .bind(&now)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to create default status '{}': {}", name, e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+    }
+
+    tx.commit().await.map_err(|e| {
+        tracing::error!("Failed to commit transaction: {}", e);
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
