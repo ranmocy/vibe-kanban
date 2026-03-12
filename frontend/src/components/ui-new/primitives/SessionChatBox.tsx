@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import {
   PaperclipIcon,
   CheckIcon,
@@ -49,7 +49,7 @@ import {
 } from './Dropdown';
 import { type ExecutorProps } from './CreateChatBox';
 import { ContextUsageGauge } from './ContextUsageGauge';
-import { TodoProgressPopup } from './TodoProgressPopup';
+import { TodoProgressButton, TodoExpandedList } from './TodoProgressPopup';
 import { useUserSystem } from '@/components/ConfigProvider';
 
 // Re-export shared types
@@ -193,6 +193,7 @@ export function SessionChatBox({
   const { t } = useTranslation('tasks');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { capabilities } = useUserSystem();
+  const [isTodoExpanded, setIsTodoExpanded] = useState(false);
 
   const supportsContextUsage =
     agent && capabilities?.[agent]?.includes(BaseAgentCapability.CONTEXT_USAGE);
@@ -532,6 +533,11 @@ export function SessionChatBox({
       variant={variant}
       error={displayError}
       banner={renderBanner()}
+      expandableContent={
+        isTodoExpanded && (todos ?? []).length > 0 ? (
+          <TodoExpandedList todos={todos ?? []} />
+        ) : null
+      }
       visualVariant={getVisualVariant()}
       isRunning={showRunningAnimation}
       onPasteFiles={actions.onPasteFiles}
@@ -665,8 +671,12 @@ export function SessionChatBox({
               <AgentIcon agent={agent} className="size-icon-xl" />
             </>
           )}
-          {/* Todo progress popup - always rendered, disabled when no todos */}
-          <TodoProgressPopup todos={todos ?? []} />
+          {/* Todo progress toggle button */}
+          <TodoProgressButton
+            todos={todos ?? []}
+            isExpanded={isTodoExpanded}
+            onToggle={() => setIsTodoExpanded((prev) => !prev)}
+          />
           {supportsContextUsage && (
             <ContextUsageGauge tokenUsageInfo={tokenUsageInfo} />
           )}

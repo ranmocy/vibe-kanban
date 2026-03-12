@@ -73,6 +73,9 @@ interface ChatBoxBaseProps {
   // Banner content (queued message indicator, feedback mode indicator)
   banner?: ReactNode;
 
+  // Expandable content (rendered between header and editor, e.g. todo list)
+  expandableContent?: ReactNode;
+
   // visualVariant
   visualVariant: VisualVariant;
 
@@ -114,6 +117,7 @@ export function ChatBoxBase({
   footerLeft,
   footerRight,
   banner,
+  expandableContent,
   visualVariant,
   onPasteFiles,
   isRunning,
@@ -176,6 +180,9 @@ export function ChatBoxBase({
           <Toolbar className="gap-[9px]">{headerRight}</Toolbar>
         </div>
       )}
+
+      {/* Expandable content (e.g. todo list) */}
+      {expandableContent}
 
       {/* Editor area */}
       <div className="flex flex-col gap-base px-base py-base">
