@@ -19,7 +19,7 @@ import {
 } from '@/components/ui-new/views/KanbanIssuePanel';
 import { useActions } from '@/contexts/ActionsContext';
 import { useUserContext } from '@/contexts/remote/UserContext';
-import { useWorkspaceContext } from '@/contexts/WorkspaceContext';
+import { useWorkspaceListContext } from '@/contexts/WorkspaceContext';
 import { CommandBarDialog } from '@/components/ui-new/dialogs/CommandBarDialog';
 import { getWorkspaceDefaults } from '@/lib/workspaceDefaults';
 import {
@@ -60,7 +60,7 @@ export function KanbanIssuePanelContainer() {
 
   const { openWorkspaceCreateFromState } = useProjectWorkspaceCreateDraft();
   const { workspaces } = useUserContext();
-  const { activeWorkspaces, archivedWorkspaces } = useWorkspaceContext();
+  const { activeWorkspaces, archivedWorkspaces } = useWorkspaceListContext();
 
   // Build set of local workspace IDs that exist on this machine
   const localWorkspaceIds = useMemo(

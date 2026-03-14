@@ -110,6 +110,11 @@ export default defineConfig({
   },
   server: {
     port: parseInt(process.env.FRONTEND_PORT || '3000'),
+    hmr: {
+      // Force HMR WebSocket to a distinct path so it does not
+      // intercept /api/* WebSocket upgrade requests
+      path: '/__vite_hmr',
+    },
     proxy: {
       '/api': {
         target: `http://localhost:${process.env.BACKEND_PORT || '3001'}`,

@@ -16,7 +16,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { AgentSelector } from '@/components/tasks/AgentSelector';
 import { ConfigSelector } from '@/components/tasks/ConfigSelector';
 import { useUserSystem } from '@/components/ConfigProvider';
-import { useWorkspaceContext } from '@/contexts/WorkspaceContext';
+import { useWorkspaceSelectionContext } from '@/contexts/WorkspaceContext';
 import { sessionsApi } from '@/lib/api';
 import { useQueryClient } from '@tanstack/react-query';
 import NiceModal, { useModal } from '@ebay/nice-modal-react';
@@ -37,7 +37,7 @@ const StartReviewDialogImpl = NiceModal.create<StartReviewDialogProps>(
     const queryClient = useQueryClient();
     const { profiles, config } = useUserSystem();
     const { sessions, selectedSession, selectedSessionId, selectSession } =
-      useWorkspaceContext();
+      useWorkspaceSelectionContext();
     const { t } = useTranslation(['tasks', 'common']);
 
     const resolvedSessionId = sessionId ?? selectedSessionId;

@@ -12,7 +12,7 @@ import {
   useWorkspacePanelState,
   RIGHT_MAIN_PANEL_MODES,
 } from '@/stores/useUiPreferencesStore';
-import { useWorkspaceContext } from '@/contexts/WorkspaceContext';
+import { useWorkspaceSelectionContext } from '@/contexts/WorkspaceContext';
 
 interface LogsPanelContextValue {
   logsPanelContent: LogsPanelContent | null;
@@ -60,7 +60,7 @@ interface LogsPanelProviderProps {
 }
 
 export function LogsPanelProvider({ children }: LogsPanelProviderProps) {
-  const { workspaceId, isCreateMode } = useWorkspaceContext();
+  const { workspaceId, isCreateMode } = useWorkspaceSelectionContext();
   const { rightMainPanelMode, setRightMainPanelMode } = useWorkspacePanelState(
     isCreateMode ? undefined : workspaceId
   );

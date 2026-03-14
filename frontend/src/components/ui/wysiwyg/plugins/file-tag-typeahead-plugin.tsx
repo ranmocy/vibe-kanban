@@ -31,7 +31,7 @@ import {
   type RepoSelectionResult,
 } from '@/components/ui-new/dialogs/selections/repoSelection';
 import { usePortalContainer } from '@/contexts/PortalContainerContext';
-import { WorkspaceContext } from '@/contexts/WorkspaceContext';
+import { WorkspaceDiffContext } from '@/contexts/WorkspaceContext';
 import { useTypeaheadOpen } from '@/components/ui/wysiwyg/context/typeahead-open-context';
 import { repoApi } from '@/lib/api';
 import {
@@ -118,7 +118,7 @@ export function FileTagTypeaheadPlugin({ repoIds }: { repoIds?: string[] }) {
   const searchRequestRef = useRef(0);
   const lastQueryRef = useRef<string | null>(null);
   // Use context directly to gracefully handle missing WorkspaceProvider (old UI)
-  const workspaceContext = useContext(WorkspaceContext);
+  const workspaceContext = useContext(WorkspaceDiffContext);
   const diffPaths = useMemo(
     () => workspaceContext?.diffPaths ?? new Set<string>(),
     [workspaceContext?.diffPaths]

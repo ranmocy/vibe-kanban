@@ -6373,6 +6373,7 @@ dependencies = [
  "git2",
  "local-deployment",
  "mime_guess",
+ "moka",
  "os_info",
  "rand 0.8.5",
  "regex",

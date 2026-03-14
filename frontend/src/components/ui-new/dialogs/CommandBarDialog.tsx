@@ -7,7 +7,7 @@ import { defineModal } from '@/lib/modals';
 import { CommandDialog } from '@/components/ui-new/primitives/Command';
 import { CommandBar } from '@/components/ui-new/primitives/CommandBar';
 import { useActions } from '@/contexts/ActionsContext';
-import { useWorkspaceContext } from '@/contexts/WorkspaceContext';
+import { useWorkspaceSelectionContext } from '@/contexts/WorkspaceContext';
 import { attemptKeys } from '@/hooks/useAttempt';
 import type {
   PageId,
@@ -47,7 +47,7 @@ function CommandBarContent({
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const queryClient = useQueryClient();
   const { executeAction, getLabel } = useActions();
-  const { workspaceId: contextWorkspaceId, repos } = useWorkspaceContext();
+  const { workspaceId: contextWorkspaceId, repos } = useWorkspaceSelectionContext();
 
   // Get issue context from props or route params (URL is single source of truth)
   const { projectId: routeProjectId, issueId: routeIssueId } = useParams<{

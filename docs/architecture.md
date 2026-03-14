@@ -215,15 +215,27 @@ This traces the most important flow — creating a task and running an agent:
 
 ## Real-Time Communication
 
-Three patterns deliver live data to the frontend:
+Three patterns deliver live data to the frontend, coordinated by a **WebSocket-primary, polling-fallback** strategy:
 
-### 1. WebSocket — Log Streaming
+### Data Channel Strategy
 
-Used for streaming agent stdout/stderr to the browser in real time.
+The `useRealtimeQuery` hook (`frontend/src/hooks/useRealtimeQuery.ts`) coordinates between WebSocket streams and HTTP polling:
+
+- When a WebSocket connection is active, HTTP polling is disabled (`refetchInterval: false`)
+- When the WebSocket disconnects, polling resumes automatically as a fallback
+- Connection status is tracked globally via a Zustand store (`useWsConnectionStatus`)
+
+### 1. WebSocket — Log and Data Streaming
+
+Used for streaming agent logs and real-time data updates.
 
 **Endpoints:**
 - `/api/execution-processes/:id/logs/raw/ws` — raw stdout/stderr
 - `/api/execution-processes/:id/logs/normalized/ws` — structured log entries
+- `/api/task-attempts/stream/ws` — workspace list updates (unified stream for active + archived)
+- `/api/task-attempts/:id/diff/ws` — file diff updates
+- `/api/projects/stream/ws` — project list updates
+- `/api/execution-processes/stream/session/ws` — execution process status
 
 **Protocol:**
 ```
@@ -237,10 +249,13 @@ Server → Client: JSON messages
   { "finished": true }
 ```
 
-**Frontend consumption** (`useLogStream` hook):
-- Connects WebSocket, accumulates log entries
+**Frontend consumption** (`useJsonPatchWsStream` hook):
+- Connects WebSocket, applies JSON Patch operations incrementally
 - Auto-reconnects with exponential backoff (up to 6 retries)
-- Clears state when process ID changes
+- Reports connection status to global `useWsConnectionStatus` store
+- Clears state when endpoint changes
+
+**Vite dev server note:** HMR WebSocket is isolated to `/__vite_hmr` path to prevent intercepting `/api/*` WebSocket upgrade requests proxied to the backend.
 
 ### 2. Server-Sent Events (SSE)
 
@@ -286,8 +301,30 @@ QueryClientProvider (React Query — stale time: 5min)
                 └── SharedAppLayout
                   └── OrgProvider (cloud)
                     └── ProjectProvider (ElectricSQL mutations)
-                      └── Page components
+                      └── WorkspaceProvider
+                        └── Page components
 ```
+
+### WorkspaceProvider Architecture
+
+The `WorkspaceProvider` is split into four focused contexts to minimise re-render cascades. Each context has a different update frequency, so consumers only re-render when the data they actually use changes:
+
+```
+WorkspaceProvider (composite)
+  └── WorkspaceListProvider        — activeWorkspaces, archivedWorkspaces
+       └── WorkspaceSelectionProvider — workspaceId, workspace, sessions, repos, navigation
+            └── WorkspaceDiffProvider      — diffs, diffPaths, diffStats
+                 └── WorkspaceGitHubProvider    — gitHubComments, PR comment functions
+```
+
+| Context | Properties | Update Frequency | Consumers |
+| ------- | ---------- | ---------------- | --------- |
+| `WorkspaceSelectionContext` | workspaceId, workspace, sessions, repos, selectWorkspace, navigateToCreate | On navigation | 17 |
+| `WorkspaceListContext` | activeWorkspaces, archivedWorkspaces | On WS/polling updates | 6 |
+| `WorkspaceDiffContext` | diffs, diffPaths, diffStats | On every diff stream message | 4 |
+| `WorkspaceGitHubContext` | gitHubComments, comment functions | When PR comments load | 2 |
+
+Each sub-provider reads `workspaceId` from `useParams()` directly to avoid cross-context dependencies. A compatibility shim `useWorkspaceContext()` is available but should be replaced with specific hooks (`useWorkspaceSelectionContext()`, etc.) for optimal performance.
 
 ### State Management
 
@@ -295,7 +332,9 @@ QueryClientProvider (React Query — stale time: 5min)
 | -------------- | ------------- | ---------------------------------------------------------------- |
 | Server state   | React Query   | Tasks, projects, sessions, config — cached with 5-min stale time |
 | UI preferences | Zustand       | Pane sizes, collapse states, kanban filters, diff view mode      |
-| Cross-cutting  | React Context | User system info, theme, search, terminal, organization          |
+| Workspace state | React Context | Split into 4 focused contexts (Selection, List, Diff, GitHub)   |
+| WS status      | Zustand       | Per-endpoint WebSocket connection tracking (`useWsConnectionStatus`) |
+| Cross-cutting  | React Context | User system info, theme, search, terminal, organisation          |
 | Real-time sync | ElectricSQL   | Cloud mode: issues, statuses, tags — optimistic mutations        |
 
 ### Component Organization
@@ -319,7 +358,23 @@ frontend/src/components/
 Component → React Query hook → api.ts fetch() → /api/* → Backend
                                                             │
 Component ← React Query cache ← JSON response ◄────────────┘
+
+Component → useJsonPatchWsStream() → WebSocket → Backend
+                                        │
+Component ← JSON Patch state ◄──────────┘
 ```
+
+When WebSocket is connected, polling is automatically disabled for that data. When it disconnects, polling resumes via `useRealtimeQuery`.
+
+**Polling intervals (idle page):**
+
+| Endpoint | Interval | Condition |
+| -------- | -------- | --------- |
+| `useShape` (ElectricSQL fallback) | 30s | Cloud mode local fallback |
+| `task-attempts/summary` | 30s | Sidebar badges |
+| `branch-status` | 15s | Git panel |
+| `task-attempts` | 30s | Task list (fallback when WS down) |
+| `organizations/projects` | 30s | Project list |
 
 **Cloud mode:**
 ```

@@ -1,6 +1,8 @@
 use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::Duration;
 
-use axum::{Json, extract::State, response::Json as ResponseJson};
+use axum::{Extension, Json, extract::State, response::Json as ResponseJson};
 use db::models::{
     coding_agent_turn::CodingAgentTurn,
     execution_process::{ExecutionProcess, ExecutionProcessStatus},
@@ -8,6 +10,8 @@ use db::models::{
     workspace::Workspace,
 };
 use deployment::Deployment;
+use futures_util::stream::{self, StreamExt};
+use moka::future::Cache;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 use utils::response::ApiResponse;
@@ -22,7 +26,7 @@ pub struct WorkspaceSummaryRequest {
 }
 
 /// Summary info for a single workspace
-#[derive(Debug, Serialize, TS)]
+#[derive(Debug, Clone, Serialize, TS)]
 pub struct WorkspaceSummary {
     pub workspace_id: Uuid,
     /// Session ID of the latest execution process
@@ -49,7 +53,7 @@ pub struct WorkspaceSummary {
 }
 
 /// Response containing summaries for requested workspaces
-#[derive(Debug, Serialize, TS)]
+#[derive(Debug, Clone, Serialize, TS)]
 pub struct WorkspaceSummaryResponse {
     pub summaries: Vec<WorkspaceSummary>,
 }
@@ -61,15 +65,60 @@ pub struct DiffStats {
     pub lines_removed: usize,
 }
 
+/// Workspace summary cache keyed on `archived` (bool).
+/// Holds up to 2 entries — one for `archived=false`, one for `archived=true`.
+/// Each entry expires after 5 seconds.
+#[derive(Clone)]
+pub struct SummaryCache {
+    inner: Cache<bool, Arc<WorkspaceSummaryResponse>>,
+}
+
+impl SummaryCache {
+    pub fn new() -> Self {
+        Self {
+            inner: Cache::builder()
+                .max_capacity(2)
+                .time_to_live(Duration::from_secs(5))
+                .build(),
+        }
+    }
+}
+
+impl Default for SummaryCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Fetch summary information for workspaces filtered by archived status.
 /// This endpoint returns data that cannot be efficiently included in the streaming endpoint.
-#[axum::debug_handler]
+#[axum::debug_handler(state = DeploymentImpl)]
 pub async fn get_workspace_summaries(
     State(deployment): State<DeploymentImpl>,
+    Extension(cache): Extension<SummaryCache>,
     Json(request): Json<WorkspaceSummaryRequest>,
 ) -> Result<ResponseJson<ApiResponse<WorkspaceSummaryResponse>>, ApiError> {
-    let pool = &deployment.db().pool;
     let archived = request.archived;
+
+    // Fast path: return cached response if still within TTL.
+    if let Some(cached) = cache.inner.get(&archived).await {
+        return Ok(ResponseJson(ApiResponse::success((*cached).clone())));
+    }
+
+    let response = compute_workspace_summary(&deployment, archived).await?;
+    let arc = Arc::new(response.clone());
+    cache.inner.insert(archived, arc).await;
+
+    Ok(ResponseJson(ApiResponse::success(response)))
+}
+
+/// Core computation for workspace summaries, separated from the handler so it can
+/// be called without going through the cache (e.g. in tests).
+async fn compute_workspace_summary(
+    deployment: &DeploymentImpl,
+    archived: bool,
+) -> Result<WorkspaceSummaryResponse, ApiError> {
+    let pool = &deployment.db().pool;
 
     // 1. Fetch all workspaces with the given archived status
     let workspaces: Vec<Workspace> = Workspace::find_all_with_status(pool, Some(archived), None)
@@ -79,9 +128,7 @@ pub async fn get_workspace_summaries(
         .collect();
 
     if workspaces.is_empty() {
-        return Ok(ResponseJson(ApiResponse::success(
-            WorkspaceSummaryResponse { summaries: vec![] },
-        )));
+        return Ok(WorkspaceSummaryResponse { summaries: vec![] });
     }
 
     // 2. Fetch latest process info for workspaces with this archived status
@@ -107,27 +154,26 @@ pub async fn get_workspace_summaries(
     // 6. Get PR status for each workspace
     let pr_statuses = Merge::get_latest_pr_status_for_workspaces(pool, archived).await?;
 
-    // 7. Compute diff stats for each workspace (in parallel)
-    let diff_futures: Vec<_> = workspaces
+    // 7. Compute diff stats for each workspace with bounded parallelism (max 10 in flight).
+    let deployment_ref = deployment;
+    let diff_futs: Vec<_> = workspaces
         .iter()
+        .filter(|ws| ws.container_ref.is_some())
         .map(|ws| {
             let workspace = ws.clone();
-            let deployment = deployment.clone();
+            let dep = deployment_ref.clone();
             async move {
-                if workspace.container_ref.is_some() {
-                    compute_workspace_diff_stats(&deployment, &workspace)
-                        .await
-                        .map(|stats| (workspace.id, stats))
-                } else {
-                    None
-                }
+                compute_workspace_diff_stats(&dep, &workspace)
+                    .await
+                    .map(|stats| (workspace.id, stats))
             }
         })
         .collect();
-
-    let diff_results: Vec<Option<(Uuid, DiffStats)>> =
-        futures_util::future::join_all(diff_futures).await;
-    let diff_stats: HashMap<Uuid, DiffStats> = diff_results.into_iter().flatten().collect();
+    let diff_stats: HashMap<Uuid, DiffStats> = stream::iter(diff_futs)
+        .buffer_unordered(10)
+        .filter_map(|opt| async move { opt })
+        .collect()
+        .await;
 
     // 8. Assemble response
     let summaries: Vec<WorkspaceSummary> = workspaces
@@ -156,9 +202,7 @@ pub async fn get_workspace_summaries(
         })
         .collect();
 
-    Ok(ResponseJson(ApiResponse::success(
-        WorkspaceSummaryResponse { summaries },
-    )))
+    Ok(WorkspaceSummaryResponse { summaries })
 }
 
 /// Compute diff stats for a workspace.

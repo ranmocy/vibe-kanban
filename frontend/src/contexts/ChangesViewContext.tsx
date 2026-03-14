@@ -10,7 +10,7 @@ import {
   useUiPreferencesStore,
   RIGHT_MAIN_PANEL_MODES,
 } from '@/stores/useUiPreferencesStore';
-import { useWorkspaceContext } from '@/contexts/WorkspaceContext';
+import { useWorkspaceDiffContext } from '@/contexts/WorkspaceContext';
 
 /** Callback type for scroll-to-file implementation (provided by ChangesPanelContainer) */
 export type ScrollToFileCallback = (path: string, lineNumber?: number) => void;
@@ -63,7 +63,7 @@ interface ChangesViewProviderProps {
 }
 
 export function ChangesViewProvider({ children }: ChangesViewProviderProps) {
-  const { diffPaths } = useWorkspaceContext();
+  const { diffPaths } = useWorkspaceDiffContext();
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
   const [selectedLineNumber, setSelectedLineNumber] = useState<number | null>(
     null

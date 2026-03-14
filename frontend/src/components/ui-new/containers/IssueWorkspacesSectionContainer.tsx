@@ -6,7 +6,7 @@ import { useProjectContext } from '@/contexts/remote/ProjectContext';
 import { useAuth } from '@/hooks/auth/useAuth';
 import { useOrgContext } from '@/contexts/remote/OrgContext';
 import { useUserContext } from '@/contexts/remote/UserContext';
-import { useWorkspaceContext } from '@/contexts/WorkspaceContext';
+import { useWorkspaceListContext } from '@/contexts/WorkspaceContext';
 import { useKanbanNavigation } from '@/hooks/useKanbanNavigation';
 import { useProjectWorkspaceCreateDraft } from '@/hooks/useProjectWorkspaceCreateDraft';
 import { attemptsApi } from '@/lib/api';
@@ -49,7 +49,7 @@ export function IssueWorkspacesSectionContainer({
     issues,
     isLoading: projectLoading,
   } = useProjectContext();
-  const { activeWorkspaces, archivedWorkspaces } = useWorkspaceContext();
+  const { activeWorkspaces, archivedWorkspaces } = useWorkspaceListContext();
   const { membersWithProfilesById, isLoading: orgLoading } = useOrgContext();
 
   const localWorkspacesById = useMemo(() => {

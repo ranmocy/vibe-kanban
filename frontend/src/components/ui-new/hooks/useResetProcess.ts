@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from 'react';
 import { useExecutionProcessesContext } from '@/contexts/ExecutionProcessesContext';
-import { useWorkspaceContext } from '@/contexts/WorkspaceContext';
+import { useWorkspaceSelectionContext } from '@/contexts/WorkspaceContext';
 import { useBranchStatus } from '@/hooks/useBranchStatus';
 import { isCodingAgent } from '@/constants/processes';
 import { useResetProcessMutation } from './useResetProcessMutation';
@@ -12,7 +12,7 @@ export interface UseResetProcessResult {
 }
 
 export function useResetProcess(): UseResetProcessResult {
-  const { workspaceId, selectedSessionId } = useWorkspaceContext();
+  const { workspaceId, selectedSessionId } = useWorkspaceSelectionContext();
   const { data: branchStatus } = useBranchStatus(workspaceId);
   const { executionProcessesAll: processes } = useExecutionProcessesContext();
 

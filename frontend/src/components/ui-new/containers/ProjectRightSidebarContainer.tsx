@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { ArrowsOutIcon, XIcon } from '@phosphor-icons/react';
 import { useProjectContext } from '@/contexts/remote/ProjectContext';
 import { useUserContext } from '@/contexts/remote/UserContext';
-import { useWorkspaceContext } from '@/contexts/WorkspaceContext';
+import { useWorkspaceListContext } from '@/contexts/WorkspaceContext';
 import { ExecutionProcessesProvider } from '@/contexts/ExecutionProcessesContext';
 import { ApprovalFeedbackProvider } from '@/contexts/ApprovalFeedbackContext';
 import { EntriesProvider } from '@/contexts/EntriesContext';
@@ -96,7 +96,7 @@ function WorkspaceSessionPanel({
   const { issueId: routeIssueId, openIssue } = useKanbanNavigation();
   const { projectId, getIssue } = useProjectContext();
   const { workspaces: remoteWorkspaces } = useUserContext();
-  const { activeWorkspaces, archivedWorkspaces } = useWorkspaceContext();
+  const { activeWorkspaces, archivedWorkspaces } = useWorkspaceListContext();
   const conversationListRef = useRef<ConversationListHandle>(null);
   const { data: workspace, isLoading: isWorkspaceLoading } = useAttempt(
     workspaceId,

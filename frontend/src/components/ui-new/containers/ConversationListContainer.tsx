@@ -36,7 +36,7 @@ import {
 import { aggregateConsecutiveEntries } from '@/utils/aggregateEntries';
 import type { WorkspaceWithSession } from '@/types/attempt';
 import type { RepoWithTargetBranch } from 'shared/types';
-import { useWorkspaceContext } from '@/contexts/WorkspaceContext';
+import { useWorkspaceSelectionContext } from '@/contexts/WorkspaceContext';
 import { ChatScriptPlaceholder } from '../primitives/conversation/ChatScriptPlaceholder';
 import { ScriptFixerDialog } from '@/components/dialogs/scripts/ScriptFixerDialog';
 import { useTeamStatus } from '@/hooks/useTeamStatus';
@@ -219,7 +219,7 @@ export const ConversationList = forwardRef<
   // Get repos from workspace context to check if scripts are configured
   let repos: RepoWithTargetBranch[] = [];
   try {
-    const workspaceContext = useWorkspaceContext();
+    const workspaceContext = useWorkspaceSelectionContext();
     repos = workspaceContext.repos;
   } catch {
     // Context not available

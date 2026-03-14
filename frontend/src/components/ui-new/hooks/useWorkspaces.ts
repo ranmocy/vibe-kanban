@@ -118,10 +118,10 @@ async function fetchWorkspaceSummariesByArchived(
 }
 
 export function useWorkspaces(): UseWorkspacesResult {
-  // Two separate WebSocket connections: one for active, one for archived
-  // No limit param - we fetch all and slice on frontend so backfill works when archiving
-  const activeEndpoint = '/api/task-attempts/stream/ws?archived=false';
-  const archivedEndpoint = '/api/task-attempts/stream/ws?archived=true';
+  // Single WebSocket connection for all workspaces (no archived filter).
+  // The backend streams all workspaces when no archived param is provided;
+  // we split active vs archived client-side using the ws.archived field.
+  const endpoint = '/api/task-attempts/stream/ws';
 
   const initialData = useCallback(
     (): WorkspacesState => ({ workspaces: {} }),
@@ -129,53 +129,40 @@ export function useWorkspaces(): UseWorkspacesResult {
   );
 
   const {
-    data: activeData,
-    isConnected: activeIsConnected,
-    isInitialized: activeIsInitialized,
-    error: activeError,
-  } = useJsonPatchWsStream<WorkspacesState>(activeEndpoint, true, initialData);
+    data,
+    isConnected,
+    isInitialized,
+    error,
+  } = useJsonPatchWsStream<WorkspacesState>(endpoint, true, initialData);
 
-  const {
-    data: archivedData,
-    isConnected: archivedIsConnected,
-    isInitialized: archivedIsInitialized,
-    error: archivedError,
-  } = useJsonPatchWsStream<WorkspacesState>(
-    archivedEndpoint,
-    true,
-    initialData
-  );
-
-  // Wait for both streams to be initialized before fetching summaries
-  // Fetch summaries for active workspaces
+  // Fetch summaries for active workspaces once the stream is ready
   const { data: activeSummaries = new Map<string, WorkspaceSummary>() } =
     useQuery({
       queryKey: workspaceSummaryKeys.byArchived(false),
       queryFn: () => fetchWorkspaceSummariesByArchived(false),
-      enabled: activeIsInitialized,
-      staleTime: 1000,
-      refetchInterval: 15000,
+      enabled: isInitialized,
+      staleTime: 30_000,
+      refetchInterval: 30_000,
       refetchOnWindowFocus: false,
-      refetchOnMount: 'always',
       placeholderData: keepPreviousData,
     });
 
-  // Fetch summaries for archived workspaces
+  // Fetch summaries for archived workspaces once the stream is ready
   const { data: archivedSummaries = new Map<string, WorkspaceSummary>() } =
     useQuery({
       queryKey: workspaceSummaryKeys.byArchived(true),
       queryFn: () => fetchWorkspaceSummariesByArchived(true),
-      enabled: archivedIsInitialized,
-      staleTime: 1000,
-      refetchInterval: 15000,
+      enabled: isInitialized,
+      staleTime: 30_000,
+      refetchInterval: 30_000,
       refetchOnWindowFocus: false,
-      refetchOnMount: 'always',
       placeholderData: keepPreviousData,
     });
 
   const workspaces = useMemo(() => {
-    if (!activeData?.workspaces) return [];
-    return Object.values(activeData.workspaces)
+    if (!data?.workspaces) return [];
+    return Object.values(data.workspaces)
+      .filter((ws) => !ws.archived)
       .sort((a, b) => {
         // First sort by pinned (pinned first)
         if (a.pinned !== b.pinned) {
@@ -187,11 +174,12 @@ export function useWorkspaces(): UseWorkspacesResult {
         );
       })
       .map((ws) => toSidebarWorkspace(ws, activeSummaries.get(ws.id)));
-  }, [activeData, activeSummaries]);
+  }, [data, activeSummaries]);
 
   const archivedWorkspaces = useMemo(() => {
-    if (!archivedData?.workspaces) return [];
-    return Object.values(archivedData.workspaces)
+    if (!data?.workspaces) return [];
+    return Object.values(data.workspaces)
+      .filter((ws) => ws.archived)
       .sort((a, b) => {
         // First sort by pinned (pinned first)
         if (a.pinned !== b.pinned) {
@@ -203,16 +191,10 @@ export function useWorkspaces(): UseWorkspacesResult {
         );
       })
       .map((ws) => toSidebarWorkspace(ws, archivedSummaries.get(ws.id)));
-  }, [archivedData, archivedSummaries]);
+  }, [data, archivedSummaries]);
 
-  // isLoading is true when we haven't received initial data from either stream
-  const isLoading = !activeIsInitialized || !archivedIsInitialized;
-
-  // Combined connection status
-  const isConnected = activeIsConnected && archivedIsConnected;
-
-  // Combined error (show first error if any)
-  const error = activeError || archivedError;
+  // isLoading is true when we haven't received initial data from the stream
+  const isLoading = !isInitialized;
 
   return {
     workspaces,

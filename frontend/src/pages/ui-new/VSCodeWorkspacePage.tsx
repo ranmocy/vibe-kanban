@@ -5,7 +5,7 @@ import { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AppWithStyleOverride } from '@/utils/StyleOverride';
 import { WebviewContextMenu } from '@/vscode/ContextMenu';
-import { useWorkspaceContext } from '@/contexts/WorkspaceContext';
+import { useWorkspaceSelectionContext, useWorkspaceDiffContext } from '@/contexts/WorkspaceContext';
 import { SessionChatBoxContainer } from '@/components/ui-new/containers/SessionChatBoxContainer';
 import {
   ConversationList,
@@ -27,10 +27,10 @@ export function VSCodeWorkspacePage() {
     selectedSession,
     selectSession,
     isLoading,
-    diffStats,
     isNewSessionMode,
     startNewSession,
-  } = useWorkspaceContext();
+  } = useWorkspaceSelectionContext();
+  const { diffStats } = useWorkspaceDiffContext();
 
   const workspaceWithSession = workspace
     ? createWorkspaceWithSession(workspace, selectedSession)

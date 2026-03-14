@@ -191,8 +191,8 @@ export function useShape<
       return response.json();
     },
     enabled,
-    refetchInterval: enabled ? 2000 : false,
-    staleTime: 1000,
+    refetchInterval: enabled ? 30_000 : false,
+    staleTime: 30_000,
   });
 
   const items = useMemo(() => {

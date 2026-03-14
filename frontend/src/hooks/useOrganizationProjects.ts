@@ -22,7 +22,8 @@ export function useOrganizationProjects(organizationId: string | null) {
       return res.json();
     },
     enabled,
-    refetchInterval: 5000,
+    staleTime: 30_000,
+    refetchInterval: 30_000,
   });
 
   return {

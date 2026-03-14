@@ -1,12 +1,12 @@
 import { useTranslation } from 'react-i18next';
-import { useWorkspaceContext } from '@/contexts/WorkspaceContext';
+import { useWorkspaceSelectionContext } from '@/contexts/WorkspaceContext';
 import { useWorkspaceNotes } from '@/hooks/useWorkspaceNotes';
 import WYSIWYGEditor from '@/components/ui/wysiwyg';
 import { SpinnerIcon } from '@phosphor-icons/react';
 
 export function WorkspaceNotesContainer() {
   const { t } = useTranslation('common');
-  const { workspace } = useWorkspaceContext();
+  const { workspace } = useWorkspaceSelectionContext();
   const workspaceId = workspace?.id;
 
   const { content, isLoading, setContent } = useWorkspaceNotes(workspaceId);

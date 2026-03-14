@@ -14,7 +14,7 @@ import { Switch } from '@/components/ui/switch';
 import { AgentSelector } from '@/components/tasks/AgentSelector';
 import { ConfigSelector } from '@/components/tasks/ConfigSelector';
 import { useUserSystem } from '@/components/ConfigProvider';
-import { useWorkspaceContext } from '@/contexts/WorkspaceContext';
+import { useWorkspaceSelectionContext } from '@/contexts/WorkspaceContext';
 import { sessionsApi } from '@/lib/api';
 import { useQueryClient } from '@tanstack/react-query';
 import NiceModal, { useModal } from '@ebay/nice-modal-react';
@@ -58,7 +58,7 @@ const ResolveConflictsDialogImpl =
         selectedSession,
         selectedSessionId,
         selectSession,
-      } = useWorkspaceContext();
+      } = useWorkspaceSelectionContext();
       const { t } = useTranslation(['tasks', 'common']);
 
       // Auto-dismiss when the user switches to a different workspace

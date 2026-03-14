@@ -26,7 +26,7 @@ import { useMessageEditContext } from '@/contexts/MessageEditContext';
 import type { UseResetProcessResult } from '@/components/ui-new/hooks/useResetProcess';
 import { useChangesView } from '@/contexts/ChangesViewContext';
 import { useLogsPanel } from '@/contexts/LogsPanelContext';
-import { useWorkspaceContext } from '@/contexts/WorkspaceContext';
+import { useWorkspaceSelectionContext } from '@/contexts/WorkspaceContext';
 import { cn } from '@/lib/utils';
 import {
   ScriptFixerDialog,
@@ -902,10 +902,10 @@ function ScriptEntryWithFix({
   // Try to get repos from workspace context - may not be available in all contexts
   let repos: RepoWithTargetBranch[] = [];
   try {
-    const workspaceContext = useWorkspaceContext();
+    const workspaceContext = useWorkspaceSelectionContext();
     repos = workspaceContext.repos;
   } catch {
-    // Context not available, fix button won't be shown
+    // Context not available
   }
 
   // Use ref to access current repos without causing callback recreation

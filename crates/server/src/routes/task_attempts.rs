@@ -1980,7 +1980,12 @@ pub fn router(deployment: &DeploymentImpl) -> Router<DeploymentImpl> {
         .route("/", get(get_task_attempts).post(create_task_attempt))
         .route("/from-pr", post(pr::create_workspace_from_pr))
         .route("/stream/ws", get(stream_workspaces_ws))
-        .route("/summary", post(workspace_summary::get_workspace_summaries))
+        .route(
+            "/summary",
+            post(workspace_summary::get_workspace_summaries).layer(
+                axum::Extension(workspace_summary::SummaryCache::new()),
+            ),
+        )
         .nest("/{id}", task_attempt_id_router)
         .nest("/{id}/images", images::router(deployment));
 

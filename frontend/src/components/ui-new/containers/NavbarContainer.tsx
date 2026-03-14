@@ -1,6 +1,6 @@
 import { useMemo, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
-import { useWorkspaceContext } from '@/contexts/WorkspaceContext';
+import { useWorkspaceSelectionContext } from '@/contexts/WorkspaceContext';
 import { useUserContext } from '@/contexts/remote/UserContext';
 import { useActions } from '@/contexts/ActionsContext';
 import { useUserOrganizations } from '@/hooks/useUserOrganizations';
@@ -63,7 +63,7 @@ function filterNavbarItems(
 
 export function NavbarContainer() {
   const { executeAction } = useActions();
-  const { workspace: selectedWorkspace, isCreateMode } = useWorkspaceContext();
+  const { workspace: selectedWorkspace, isCreateMode } = useWorkspaceSelectionContext();
   const { workspaces } = useUserContext();
   const location = useLocation();
   const isOnProjectPage = location.pathname.startsWith('/projects/');

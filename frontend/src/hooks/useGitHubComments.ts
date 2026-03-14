@@ -1,4 +1,4 @@
-import { useMemo, useCallback } from 'react';
+import { useMemo, useCallback, useState, useEffect } from 'react';
 import { useQueries } from '@tanstack/react-query';
 import { attemptsApi } from '@/lib/api';
 import { prCommentsKeys } from './usePrComments';
@@ -52,13 +52,43 @@ export function useGitHubComments({
     true // Default to shown
   );
 
+  // Defer activation until after first paint so comments never block LCP
+  const [afterFirstPaint, setAfterFirstPaint] = useState(false);
+
+  useEffect(() => {
+    let handle: number | undefined;
+
+    const schedule =
+      typeof requestIdleCallback !== 'undefined'
+        ? (cb: () => void) => {
+            handle = requestIdleCallback(cb, { timeout: 2000 });
+          }
+        : (cb: () => void) => {
+            handle = requestAnimationFrame(() => requestAnimationFrame(cb));
+          };
+
+    schedule(() => setAfterFirstPaint(true));
+
+    return () => {
+      if (handle !== undefined) {
+        if (typeof cancelIdleCallback !== 'undefined') {
+          cancelIdleCallback(handle);
+        } else {
+          cancelAnimationFrame(handle);
+        }
+      }
+    };
+  }, []);
+
   // Fetch PR comments for all repos with PRs in parallel
   const queries = useQueries({
     queries: repoIds.map((repoId) => ({
       queryKey: prCommentsKeys.byAttempt(workspaceId, repoId),
       queryFn: () => attemptsApi.getPrComments(workspaceId!, repoId),
-      enabled: enabled && !!workspaceId,
+      enabled: enabled && !!workspaceId && afterFirstPaint,
       staleTime: 30_000,
+      gcTime: 60_000,
+      refetchOnMount: false,
       retry: 2,
     })),
   });

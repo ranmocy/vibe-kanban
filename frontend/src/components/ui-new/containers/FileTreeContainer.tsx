@@ -8,7 +8,7 @@ import {
   sortDiffs,
 } from '@/utils/fileTreeUtils';
 import { usePersistedCollapsedPaths } from '@/stores/useUiPreferencesStore';
-import { useWorkspaceContext } from '@/contexts/WorkspaceContext';
+import { useWorkspaceGitHubContext } from '@/contexts/WorkspaceContext';
 import { useChangesView } from '@/contexts/ChangesViewContext';
 import type { Diff } from 'shared/types';
 
@@ -40,7 +40,7 @@ export function FileTreeContainer({
     getFilesWithGitHubComments,
     getFirstCommentLineForFile,
     isGitHubCommentsLoading,
-  } = useWorkspaceContext();
+  } = useWorkspaceGitHubContext();
 
   const { selectFile, scrollToFile } = useChangesView();
 

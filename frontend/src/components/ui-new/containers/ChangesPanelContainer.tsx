@@ -1,8 +1,11 @@
-import { useRef, useEffect, useCallback, useState, useMemo } from 'react';
+import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react';
 import { ChangesPanel, ChangesPanelHandle } from '../views/ChangesPanel';
 import { sortDiffs } from '@/utils/fileTreeUtils';
 import { useChangesView } from '@/contexts/ChangesViewContext';
-import { useWorkspaceContext } from '@/contexts/WorkspaceContext';
+import {
+  useWorkspaceDiffContext,
+  useWorkspaceSelectionContext,
+} from '@/contexts/WorkspaceContext';
 import { useTask } from '@/hooks/useTask';
 import { useScrollSyncStateMachine } from '@/hooks/useScrollSyncStateMachine';
 import type { Diff, DiffChangeKind } from 'shared/types';
@@ -48,11 +51,12 @@ interface ChangesPanelContainerProps {
   attemptId: string;
 }
 
-export function ChangesPanelContainer({
+export const ChangesPanelContainer = React.memo(function ChangesPanelContainer({
   className,
   attemptId,
 }: ChangesPanelContainerProps) {
-  const { diffs, workspace } = useWorkspaceContext();
+  const { diffs } = useWorkspaceDiffContext();
+  const { workspace } = useWorkspaceSelectionContext();
   const { data: task } = useTask(workspace?.task_id, {
     enabled: !!workspace?.task_id,
   });
@@ -291,4 +295,4 @@ export function ChangesPanelContainer({
       attemptId={attemptId}
     />
   );
-}
+});

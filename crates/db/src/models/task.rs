@@ -117,8 +117,34 @@ impl Task {
         pool: &SqlitePool,
         project_id: Uuid,
     ) -> Result<Vec<TaskWithAttemptStatus>, sqlx::Error> {
-        let records = sqlx::query!(
-            r#"SELECT
+        let tasks = sqlx::query!(
+            r#"WITH task_workspaces AS (
+    SELECT
+        w.task_id,
+        ep.status,
+        s.executor,
+        ep.created_at,
+        ROW_NUMBER() OVER (
+            PARTITION BY w.task_id
+            ORDER BY ep.created_at DESC
+        ) AS rn
+    FROM workspaces w
+    JOIN sessions s ON s.workspace_id = w.id
+    JOIN execution_processes ep ON ep.session_id = s.id
+    WHERE ep.run_reason IN ('setupscript', 'cleanupscript', 'codingagent')
+      AND ep.dropped = FALSE
+),
+task_status AS (
+    SELECT
+        task_id,
+        MAX(CASE WHEN status = 'running' THEN 1 ELSE 0 END)           AS has_in_progress_attempt,
+        MAX(CASE WHEN rn = 1 AND status IN ('failed','killed')
+                 THEN 1 ELSE 0 END)                                    AS last_attempt_failed,
+        MAX(CASE WHEN rn = 1 THEN executor ELSE NULL END)              AS executor
+    FROM task_workspaces
+    GROUP BY task_id
+)
+SELECT
   t.id                            AS "id!: Uuid",
   t.project_id                    AS "project_id!: Uuid",
   t.title,
@@ -127,49 +153,19 @@ impl Task {
   t.parent_workspace_id           AS "parent_workspace_id: Uuid",
   t.created_at                    AS "created_at!: DateTime<Utc>",
   t.updated_at                    AS "updated_at!: DateTime<Utc>",
-
-  CASE WHEN EXISTS (
-    SELECT 1
-      FROM workspaces w
-      JOIN sessions s ON s.workspace_id = w.id
-      JOIN execution_processes ep ON ep.session_id = s.id
-     WHERE w.task_id       = t.id
-       AND ep.status        = 'running'
-       AND ep.run_reason IN ('setupscript','cleanupscript','codingagent')
-     LIMIT 1
-  ) THEN 1 ELSE 0 END            AS "has_in_progress_attempt!: i64",
-
-  CASE WHEN (
-    SELECT ep.status
-      FROM workspaces w
-      JOIN sessions s ON s.workspace_id = w.id
-      JOIN execution_processes ep ON ep.session_id = s.id
-     WHERE w.task_id       = t.id
-     AND ep.run_reason IN ('setupscript','cleanupscript','codingagent')
-     ORDER BY ep.created_at DESC
-     LIMIT 1
-  ) IN ('failed','killed') THEN 1 ELSE 0 END
-                                 AS "last_attempt_failed!: i64",
-
-  ( SELECT s.executor
-      FROM workspaces w
-      JOIN sessions s ON s.workspace_id = w.id
-      WHERE w.task_id = t.id
-     ORDER BY s.created_at DESC
-      LIMIT 1
-    )                               AS "executor!: String"
-
+  COALESCE(ts.has_in_progress_attempt, 0) AS "has_in_progress_attempt!: i64",
+  COALESCE(ts.last_attempt_failed, 0)     AS "last_attempt_failed!: i64",
+  COALESCE(ts.executor, '')               AS "executor!: String"
 FROM tasks t
+LEFT JOIN task_status ts ON ts.task_id = t.id
 WHERE t.project_id = $1
 ORDER BY t.created_at DESC"#,
             project_id
         )
         .fetch_all(pool)
-        .await?;
-
-        let tasks = records
-            .into_iter()
-            .map(|rec| TaskWithAttemptStatus {
+        .await?
+        .into_iter()
+        .map(|rec| TaskWithAttemptStatus {
                 task: Task {
                     id: rec.id,
                     project_id: rec.project_id,

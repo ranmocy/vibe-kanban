@@ -21,7 +21,10 @@ import {
   resolveLabel,
 } from '@/components/ui-new/actions';
 import { getActionLabel } from '@/components/ui-new/actions/useActionVisibility';
-import { useWorkspaceContext } from '@/contexts/WorkspaceContext';
+import {
+  useWorkspaceSelectionContext,
+  useWorkspaceListContext,
+} from '@/contexts/WorkspaceContext';
 import { UserContext } from '@/contexts/remote/UserContext';
 import { useDevServer } from '@/hooks/useDevServer';
 import { useLogsPanel } from '@/contexts/LogsPanelContext';
@@ -105,8 +108,9 @@ export function ActionsProvider({ children }: ActionsProviderProps) {
   // Get selected organization ID from store (for kanban context)
   const selectedOrgId = useOrganizationStore((s) => s.selectedOrgId);
   // Get workspace context (ActionsProvider is nested inside WorkspaceProvider)
-  const { selectWorkspace, activeWorkspaces, workspaceId, workspace } =
-    useWorkspaceContext();
+  const { selectWorkspace, workspaceId, workspace } =
+    useWorkspaceSelectionContext();
+  const { activeWorkspaces } = useWorkspaceListContext();
   // Get remote workspaces (optional — not available in VSCodeScope)
   const userCtx = useContext(UserContext);
 

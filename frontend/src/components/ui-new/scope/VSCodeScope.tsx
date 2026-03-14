@@ -2,7 +2,7 @@ import { ReactNode, useState } from 'react';
 import { PortalContainerContext } from '@/contexts/PortalContainerContext';
 import {
   WorkspaceProvider,
-  useWorkspaceContext,
+  useWorkspaceSelectionContext,
 } from '@/contexts/WorkspaceContext';
 import { ActionsProvider } from '@/contexts/ActionsContext';
 import { ExecutionProcessesProvider } from '@/contexts/ExecutionProcessesContext';
@@ -20,7 +20,7 @@ function ExecutionProcessesProviderWrapper({
 }: {
   children: ReactNode;
 }) {
-  const { workspaceId, selectedSessionId } = useWorkspaceContext();
+  const { workspaceId, selectedSessionId } = useWorkspaceSelectionContext();
   return (
     <ExecutionProcessesProvider
       attemptId={workspaceId}

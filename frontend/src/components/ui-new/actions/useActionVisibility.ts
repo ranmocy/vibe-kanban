@@ -6,7 +6,7 @@ import {
   type LayoutMode,
 } from '@/stores/useUiPreferencesStore';
 import { useDiffViewStore, useDiffViewMode } from '@/stores/useDiffViewStore';
-import { useWorkspaceContext } from '@/contexts/WorkspaceContext';
+import { useWorkspaceSelectionContext } from '@/contexts/WorkspaceContext';
 import { useUserSystem } from '@/components/ConfigProvider';
 import { useDevServer } from '@/hooks/useDevServer';
 import { useBranchStatus } from '@/hooks/useBranchStatus';
@@ -38,7 +38,7 @@ interface ActionVisibilityOptions {
 export function useActionVisibilityContext(
   options?: ActionVisibilityOptions
 ): ActionVisibilityContext {
-  const { workspace, workspaceId, isCreateMode, repos } = useWorkspaceContext();
+  const { workspace, workspaceId, isCreateMode, repos } = useWorkspaceSelectionContext();
   // Use workspace-specific panel state (pass undefined when in create mode)
   const panelState = useWorkspacePanelState(
     isCreateMode ? undefined : workspaceId

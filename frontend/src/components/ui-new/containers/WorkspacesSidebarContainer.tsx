@@ -1,5 +1,8 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
-import { useWorkspaceContext } from '@/contexts/WorkspaceContext';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import {
+  useWorkspaceSelectionContext,
+  useWorkspaceListContext,
+} from '@/contexts/WorkspaceContext';
 import { useUserContext } from '@/contexts/remote/UserContext';
 import { useScratch } from '@/hooks/useScratch';
 import { useAllOrganizationProjects } from '@/hooks/useAllOrganizationProjects';
@@ -30,17 +33,17 @@ interface WorkspacesSidebarContainerProps {
   onScrollToBottom: () => void;
 }
 
-export function WorkspacesSidebarContainer({
-  onScrollToBottom,
-}: WorkspacesSidebarContainerProps) {
+export const WorkspacesSidebarContainer = React.memo(
+  function WorkspacesSidebarContainer({
+    onScrollToBottom,
+  }: WorkspacesSidebarContainerProps) {
   const {
     workspaceId: selectedWorkspaceId,
-    activeWorkspaces,
-    archivedWorkspaces,
     isCreateMode,
     selectWorkspace,
     navigateToCreate,
-  } = useWorkspaceContext();
+  } = useWorkspaceSelectionContext();
+  const { activeWorkspaces, archivedWorkspaces } = useWorkspaceListContext();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [showArchive, setShowArchive] = usePersistedExpanded(
@@ -55,7 +58,10 @@ export function WorkspacesSidebarContainer({
   const layoutMode: WorkspaceLayoutMode = isAccordionLayout
     ? 'accordion'
     : 'flat';
-  const toggleLayoutMode = () => setAccordionLayout(!isAccordionLayout);
+  const toggleLayoutMode = useCallback(
+    () => setAccordionLayout(),
+    [setAccordionLayout]
+  );
 
   // Workspace sidebar filters
   const workspaceFilters = useUiPreferencesStore((s) => s.workspaceFilters);
@@ -343,3 +349,4 @@ export function WorkspacesSidebarContainer({
     />
   );
 }
+);

@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import type { ExecutionProcess } from 'shared/types';
 
 interface PaginatedProcessesResult {
@@ -28,73 +29,58 @@ interface HistoryResponse {
 const INITIAL_PAGE_SIZE = 10;
 const LOAD_MORE_PAGE_SIZE = 10;
 
+async function fetchPage(
+  sid: string,
+  limit: number,
+  before?: string | null
+): Promise<HistoryResponse> {
+  const params = new URLSearchParams({
+    session_id: sid,
+    limit: String(limit),
+    show_soft_deleted: 'true',
+  });
+  if (before) params.set('before', before);
+  const res = await fetch(`/api/execution-processes/history?${params}`);
+  if (!res.ok) throw new Error(`History fetch failed: ${res.status}`);
+  return res.json() as Promise<HistoryResponse>;
+}
+
 export function usePaginatedProcesses(
   sessionId: string | undefined
 ): PaginatedProcessesResult {
   const [processes, setProcesses] = useState<ExecutionProcess[]>([]);
   const [hasMore, setHasMore] = useState(false);
-  const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const nextCursorRef = useRef<string | null>(null);
   const loadingRef = useRef(false);
+  const hasLoadedMoreRef = useRef(false);
 
-  const fetchPage = useCallback(
-    async (
-      sid: string,
-      limit: number,
-      before?: string | null
-    ): Promise<HistoryResponse> => {
-      const params = new URLSearchParams({
-        session_id: sid,
-        limit: String(limit),
-        show_soft_deleted: 'true',
-      });
-      if (before) params.set('before', before);
-      const res = await fetch(
-        `/api/execution-processes/history?${params}`
-      );
-      if (!res.ok) throw new Error(`History fetch failed: ${res.status}`);
-      return res.json() as Promise<HistoryResponse>;
-    },
-    []
-  );
+  const { data: initialPage, isLoading: isInitialLoading } = useQuery({
+    queryKey: ['execution-processes', 'history', sessionId, INITIAL_PAGE_SIZE],
+    queryFn: () => fetchPage(sessionId!, INITIAL_PAGE_SIZE),
+    enabled: !!sessionId,
+    staleTime: 10000,
+  });
 
-  // Load initial page on sessionId change
   useEffect(() => {
-    if (!sessionId) return;
-    let cancelled = false;
-
-    setIsInitialLoading(true);
-    setError(null);
+    hasLoadedMoreRef.current = false;
     nextCursorRef.current = null;
     loadingRef.current = false;
+  }, [sessionId]);
 
-    fetchPage(sessionId, INITIAL_PAGE_SIZE)
-      .then((data) => {
-        if (cancelled) return;
-        setProcesses(data.processes);
-        setHasMore(data.has_more);
-        nextCursorRef.current = data.next_cursor;
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        const message =
-          err instanceof Error ? err.message : 'Failed to load history';
-        setError(message);
-      })
-      .finally(() => {
-        if (!cancelled) setIsInitialLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [sessionId, fetchPage]);
+  useEffect(() => {
+    if (!initialPage) return;
+    if (hasLoadedMoreRef.current) return;
+    setProcesses(initialPage.processes);
+    setHasMore(initialPage.has_more);
+    nextCursorRef.current = initialPage.next_cursor;
+  }, [initialPage]);
 
   const loadMore = useCallback(async (): Promise<ExecutionProcess[]> => {
     if (!sessionId || !hasMore || loadingRef.current) return [];
     loadingRef.current = true;
+    hasLoadedMoreRef.current = true;
     setIsLoadingMore(true);
     setError(null);
 
@@ -118,16 +104,16 @@ export function usePaginatedProcesses(
       loadingRef.current = false;
       setIsLoadingMore(false);
     }
-  }, [sessionId, hasMore, fetchPage]);
+  }, [sessionId, hasMore]);
 
   const reset = useCallback(() => {
     setProcesses([]);
     setHasMore(false);
-    setIsInitialLoading(true);
     setIsLoadingMore(false);
     setError(null);
     nextCursorRef.current = null;
     loadingRef.current = false;
+    hasLoadedMoreRef.current = false;
   }, []);
 
   return {

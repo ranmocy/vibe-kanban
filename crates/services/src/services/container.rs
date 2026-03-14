@@ -926,14 +926,10 @@ pub trait ContainerService {
                     }
                 };
 
-            if let Err(err) = self.ensure_container_exists(&workspace).await {
-                tracing::warn!(
-                    "Failed to recreate worktree before log normalization for workspace {}: {}",
-                    workspace.id,
-                    err
-                );
-            }
-
+            // Use the stored container_ref path directly — don't recreate the
+            // worktree just for log normalization.  The normalizer only needs the
+            // path string to resolve relative filenames in already-recorded diffs;
+            // it never reads from the working tree itself.
             let current_dir = self.workspace_to_current_dir(&workspace);
 
             let executor_action = if let Ok(executor_action) = process.executor_action() {

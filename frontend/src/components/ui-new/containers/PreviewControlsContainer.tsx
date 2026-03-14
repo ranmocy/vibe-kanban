@@ -6,7 +6,7 @@ import {
   useUiPreferencesStore,
   RIGHT_MAIN_PANEL_MODES,
 } from '@/stores/useUiPreferencesStore';
-import { useWorkspaceContext } from '@/contexts/WorkspaceContext';
+import { useWorkspaceSelectionContext } from '@/contexts/WorkspaceContext';
 import { useLogsPanel } from '@/contexts/LogsPanelContext';
 
 interface PreviewControlsContainerProps {
@@ -18,7 +18,7 @@ export function PreviewControlsContainer({
   attemptId,
   className,
 }: PreviewControlsContainerProps) {
-  const { repos } = useWorkspaceContext();
+  const { repos } = useWorkspaceSelectionContext();
   const { viewProcessInPanel } = useLogsPanel();
   const setRightMainPanelMode = useUiPreferencesStore(
     (s) => s.setRightMainPanelMode

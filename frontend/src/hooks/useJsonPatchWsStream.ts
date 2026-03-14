@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { produce } from 'immer';
 import type { Operation } from 'rfc6902';
 import { applyUpsertPatch } from '@/utils/jsonPatch';
+import { useWsConnectionStatus } from './useWsConnectionStatus';
 
 type WsJsonPatchMsg = { JsonPatch: Operation[] };
 type WsReadyMsg = { Ready: true };
@@ -78,6 +79,9 @@ export const useJsonPatchWsStream = <T extends object>(
       setIsInitialized(false);
       setError(null);
       dataRef.current = undefined;
+      if (endpoint) {
+        useWsConnectionStatus.getState().setConnected(endpoint, false);
+      }
       return;
     }
 
@@ -109,6 +113,8 @@ export const useJsonPatchWsStream = <T extends object>(
           window.clearTimeout(retryTimerRef.current);
           retryTimerRef.current = null;
         }
+        // Report to global WS connection status store
+        useWsConnectionStatus.getState().setConnected(endpoint, true);
       };
 
       ws.onmessage = (event) => {
@@ -159,6 +165,8 @@ export const useJsonPatchWsStream = <T extends object>(
 
       ws.onclose = (evt) => {
         setIsConnected(false);
+        // Report to global WS connection status store
+        useWsConnectionStatus.getState().setConnected(endpoint, false);
         wsRef.current = null;
 
         // Do not reconnect if we received a finished message or clean close

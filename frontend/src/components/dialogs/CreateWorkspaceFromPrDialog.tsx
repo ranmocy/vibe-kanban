@@ -24,7 +24,7 @@ import { useNavigateWithSearch } from '@/hooks';
 import NiceModal, { useModal } from '@ebay/nice-modal-react';
 import { defineModal } from '@/lib/modals';
 import { attemptsApi, repoApi } from '@/lib/api';
-import { WorkspaceContext } from '@/contexts/WorkspaceContext';
+import { WorkspaceSelectionContext } from '@/contexts/WorkspaceContext';
 import { SearchableDropdownContainer } from '@/components/ui-new/containers/SearchableDropdownContainer';
 import type { OpenPrInfo, GitRemote } from 'shared/types';
 
@@ -37,7 +37,7 @@ const CreateWorkspaceFromPrDialogImpl =
     const { t } = useTranslation('tasks');
     const queryClient = useQueryClient();
 
-    const workspaceContext = useContext(WorkspaceContext);
+    const workspaceContext = useContext(WorkspaceSelectionContext);
     const currentWorkspaceRepoId = workspaceContext?.repos[0]?.id ?? null;
 
     const [selectedRepoId, setSelectedRepoId] = useState<string | null>(null);

@@ -29,74 +29,53 @@ import type {
 
 export type { NormalizedGitHubComment } from '@/hooks/useGitHubComments';
 
-interface WorkspaceContextValue {
+// ---------------------------------------------------------------------------
+// Shared internal hook — reads workspaceId and isCreateMode from the URL.
+// Each sub-provider calls this independently so they never subscribe to each
+// other's context; the values come straight from React Router (synchronous).
+// ---------------------------------------------------------------------------
+
+function useWorkspaceRouteInfo() {
+  const { workspaceId } = useParams<{ workspaceId: string }>();
+  const location = useLocation();
+  const isCreateMode = location.pathname === '/workspaces/create';
+  return { workspaceId, isCreateMode };
+}
+
+// ===========================================================================
+// 1. WorkspaceSelectionContext
+//    Changes only when the user navigates to a different workspace or session.
+// ===========================================================================
+
+export interface WorkspaceSelectionContextValue {
   workspaceId: string | undefined;
-  /** Real workspace data from API */
   workspace: ApiWorkspace | undefined;
-  /** Active workspaces for sidebar display */
-  activeWorkspaces: SidebarWorkspace[];
-  /** Archived workspaces for sidebar display */
-  archivedWorkspaces: SidebarWorkspace[];
   isLoading: boolean;
   isCreateMode: boolean;
   selectWorkspace: (id: string) => void;
   navigateToCreate: () => void;
-  /** Sessions for the current workspace */
   sessions: Session[];
   selectedSession: Session | undefined;
   selectedSessionId: string | undefined;
   selectSession: (sessionId: string) => void;
   selectLatestSession: () => void;
   isSessionsLoading: boolean;
-  /** Whether user is creating a new session */
   isNewSessionMode: boolean;
-  /** Enter new session mode */
   startNewSession: () => void;
-  /** Repos for the current workspace */
   repos: RepoWithTargetBranch[];
   isReposLoading: boolean;
-  /** GitHub PR Comments */
-  gitHubComments: UnifiedPrComment[];
-  isGitHubCommentsLoading: boolean;
-  showGitHubComments: boolean;
-  setShowGitHubComments: (show: boolean) => void;
-  getGitHubCommentsForFile: (filePath: string) => NormalizedGitHubComment[];
-  getGitHubCommentCountForFile: (filePath: string) => number;
-  getFilesWithGitHubComments: () => string[];
-  getFirstCommentLineForFile: (filePath: string) => number | null;
-  /** Diffs for the current workspace */
-  diffs: Diff[];
-  /** Set of file paths in the diffs */
-  diffPaths: Set<string>;
-  /** Aggregate diff statistics */
-  diffStats: DiffStats;
 }
 
-// Exported for optional usage outside WorkspaceProvider (e.g., old UI)
-export const WorkspaceContext = createHmrContext<WorkspaceContextValue | null>(
-  'WorkspaceContext',
-  null
-);
+export const WorkspaceSelectionContext =
+  createHmrContext<WorkspaceSelectionContextValue | null>(
+    'WorkspaceSelectionContext',
+    null
+  );
 
-interface WorkspaceProviderProps {
-  children: ReactNode;
-}
-
-export function WorkspaceProvider({ children }: WorkspaceProviderProps) {
-  const { workspaceId } = useParams<{ workspaceId: string }>();
+function WorkspaceSelectionProvider({ children }: { children: ReactNode }) {
+  const { workspaceId, isCreateMode } = useWorkspaceRouteInfo();
   const navigate = useNavigate();
-  const location = useLocation();
   const queryClient = useQueryClient();
-
-  // Derive isCreateMode from URL path instead of prop to allow provider to persist across route changes
-  const isCreateMode = location.pathname === '/workspaces/create';
-
-  // Fetch workspaces for sidebar display
-  const {
-    workspaces: activeWorkspaces,
-    archivedWorkspaces,
-    isLoading: isLoadingList,
-  } = useWorkspaces();
 
   // Fetch real workspace data for the selected workspace
   const { data: workspace, isLoading: isLoadingWorkspace } = useAttempt(
@@ -121,43 +100,148 @@ export function WorkspaceProvider({ children }: WorkspaceProviderProps) {
     enabled: !isCreateMode,
   });
 
-  // Find all repos that have PRs attached by checking branch status merges.
-  // This handles multi-repo workspaces where PRs might be on any repo.
-  const { data: branchStatus } = useBranchStatus(
-    !isCreateMode ? workspaceId : undefined
+  const isLoading = isLoadingWorkspace;
+
+  const selectWorkspace = useCallback(
+    (id: string) => {
+      attemptsApi
+        .markSeen(id)
+        .then(() => {
+          queryClient.invalidateQueries({ queryKey: workspaceSummaryKeys.all });
+        })
+        .catch((error) => {
+          console.warn('Failed to mark workspace as seen:', error);
+        });
+      navigate(`/workspaces/${id}`);
+    },
+    [navigate, queryClient]
   );
 
-  const prRepoIds = useMemo(() => {
-    if (!branchStatus) return repos[0]?.id ? [repos[0].id] : [];
-    const ids = branchStatus
-      .filter((s) => s.merges?.some((m) => m.type === 'pr'))
-      .map((s) => s.repo_id);
-    return ids.length > 0 ? ids : repos[0]?.id ? [repos[0].id] : [];
-  }, [branchStatus, repos]);
-
-  // Check if current workspace has a PR attached (from workspace summaries)
-  const currentWorkspaceSummary = activeWorkspaces.find(
-    (w) => w.id === workspaceId
+  const navigateToCreate = useCallback(
+    () => navigate('/workspaces/create'),
+    [navigate]
   );
-  const hasPrAttached = !!currentWorkspaceSummary?.prStatus;
 
-  // GitHub comments hook (fetching, normalization, and helpers)
+  const value = useMemo<WorkspaceSelectionContextValue>(
+    () => ({
+      workspaceId,
+      workspace,
+      isLoading,
+      isCreateMode,
+      selectWorkspace,
+      navigateToCreate,
+      sessions,
+      selectedSession,
+      selectedSessionId,
+      selectSession,
+      selectLatestSession,
+      isSessionsLoading,
+      isNewSessionMode,
+      startNewSession,
+      repos,
+      isReposLoading,
+    }),
+    [
+      workspaceId,
+      workspace,
+      isLoading,
+      isCreateMode,
+      selectWorkspace,
+      navigateToCreate,
+      sessions,
+      selectedSession,
+      selectedSessionId,
+      selectSession,
+      selectLatestSession,
+      isSessionsLoading,
+      isNewSessionMode,
+      startNewSession,
+      repos,
+      isReposLoading,
+    ]
+  );
+
+  return (
+    <WorkspaceSelectionContext.Provider value={value}>
+      {children}
+    </WorkspaceSelectionContext.Provider>
+  );
+}
+
+export function useWorkspaceSelectionContext(): WorkspaceSelectionContextValue {
+  const context = useContext(WorkspaceSelectionContext);
+  if (!context) {
+    throw new Error(
+      'useWorkspaceSelectionContext must be used within a WorkspaceProvider'
+    );
+  }
+  return context;
+}
+
+// ===========================================================================
+// 2. WorkspaceListContext
+//    Changes on workspace list polls / WebSocket updates.
+// ===========================================================================
+
+export interface WorkspaceListContextValue {
+  activeWorkspaces: SidebarWorkspace[];
+  archivedWorkspaces: SidebarWorkspace[];
+}
+
+export const WorkspaceListContext =
+  createHmrContext<WorkspaceListContextValue | null>(
+    'WorkspaceListContext',
+    null
+  );
+
+function WorkspaceListProvider({ children }: { children: ReactNode }) {
   const {
-    gitHubComments,
-    isGitHubCommentsLoading,
-    showGitHubComments,
-    setShowGitHubComments,
-    getGitHubCommentsForFile,
-    getGitHubCommentCountForFile,
-    getFilesWithGitHubComments,
-    getFirstCommentLineForFile,
-  } = useGitHubComments({
-    workspaceId,
-    repoIds: prRepoIds,
-    enabled: !isCreateMode && hasPrAttached,
-  });
+    workspaces: activeWorkspaces,
+    archivedWorkspaces,
+  } = useWorkspaces();
 
-  // Stream diffs for the current workspace
+  const value = useMemo<WorkspaceListContextValue>(
+    () => ({ activeWorkspaces, archivedWorkspaces }),
+    [activeWorkspaces, archivedWorkspaces]
+  );
+
+  return (
+    <WorkspaceListContext.Provider value={value}>
+      {children}
+    </WorkspaceListContext.Provider>
+  );
+}
+
+export function useWorkspaceListContext(): WorkspaceListContextValue {
+  const context = useContext(WorkspaceListContext);
+  if (!context) {
+    throw new Error(
+      'useWorkspaceListContext must be used within a WorkspaceProvider'
+    );
+  }
+  return context;
+}
+
+// ===========================================================================
+// 3. WorkspaceDiffContext
+//    Changes on every diff stream message — highest update frequency.
+// ===========================================================================
+
+export interface WorkspaceDiffContextValue {
+  diffs: Diff[];
+  diffPaths: Set<string>;
+  diffStats: DiffStats;
+}
+
+export const WorkspaceDiffContext =
+  createHmrContext<WorkspaceDiffContextValue | null>(
+    'WorkspaceDiffContext',
+    null
+  );
+
+function WorkspaceDiffProvider({ children }: { children: ReactNode }) {
+  const { workspaceId, isCreateMode } = useWorkspaceRouteInfo();
+
   const { diffs } = useDiffStream(workspaceId ?? null, !isCreateMode);
 
   const diffPaths = useMemo(
@@ -181,53 +265,98 @@ export function WorkspaceProvider({ children }: WorkspaceProviderProps) {
     [diffs]
   );
 
-  const isLoading = isLoadingList || isLoadingWorkspace;
-
-  const selectWorkspace = useCallback(
-    (id: string) => {
-      // Fire-and-forget mark as seen (don't block navigation)
-      attemptsApi
-        .markSeen(id)
-        .then(() => {
-          // Invalidate summary cache to refresh unseen indicators
-          queryClient.invalidateQueries({ queryKey: workspaceSummaryKeys.all });
-        })
-        .catch((error) => {
-          // Silently fail - this is not critical
-          console.warn('Failed to mark workspace as seen:', error);
-        });
-      navigate(`/workspaces/${id}`);
-    },
-    [navigate, queryClient]
+  const value = useMemo<WorkspaceDiffContextValue>(
+    () => ({ diffs, diffPaths, diffStats }),
+    [diffs, diffPaths, diffStats]
   );
 
-  const navigateToCreate = useMemo(
-    () => () => {
-      navigate('/workspaces/create');
-    },
-    [navigate]
+  return (
+    <WorkspaceDiffContext.Provider value={value}>
+      {children}
+    </WorkspaceDiffContext.Provider>
+  );
+}
+
+export function useWorkspaceDiffContext(): WorkspaceDiffContextValue {
+  const context = useContext(WorkspaceDiffContext);
+  if (!context) {
+    throw new Error(
+      'useWorkspaceDiffContext must be used within a WorkspaceProvider'
+    );
+  }
+  return context;
+}
+
+// ===========================================================================
+// 4. WorkspaceGitHubContext
+//    Changes when PR comments load (burst during init, then stable).
+// ===========================================================================
+
+export interface WorkspaceGitHubContextValue {
+  gitHubComments: UnifiedPrComment[];
+  isGitHubCommentsLoading: boolean;
+  showGitHubComments: boolean;
+  setShowGitHubComments: (show: boolean) => void;
+  getGitHubCommentsForFile: (filePath: string) => NormalizedGitHubComment[];
+  getGitHubCommentCountForFile: (filePath: string) => number;
+  getFilesWithGitHubComments: () => string[];
+  getFirstCommentLineForFile: (filePath: string) => number | null;
+}
+
+export const WorkspaceGitHubContext =
+  createHmrContext<WorkspaceGitHubContextValue | null>(
+    'WorkspaceGitHubContext',
+    null
   );
 
-  const value = useMemo(
+function WorkspaceGitHubProvider({ children }: { children: ReactNode }) {
+  const { workspaceId, isCreateMode } = useWorkspaceRouteInfo();
+
+  // React Query deduplicates these calls — same query keys as in
+  // WorkspaceSelectionProvider so no extra network traffic.
+  const { repos } = useAttemptRepo(workspaceId, {
+    enabled: !isCreateMode,
+  });
+
+  const { data: branchStatus } = useBranchStatus(
+    !isCreateMode ? workspaceId : undefined
+  );
+
+  // Reuse the list context's activeWorkspaces to check for PR attachment.
+  // We call useWorkspaceListContext here (safe: WorkspaceListProvider is an
+  // ancestor of WorkspaceGitHubProvider in the nesting order).
+  const { activeWorkspaces } = useWorkspaceListContext();
+
+  const prRepoIds = useMemo(() => {
+    if (!branchStatus) return repos[0]?.id ? [repos[0].id] : [];
+    const ids = branchStatus
+      .filter((s) => s.merges?.some((m) => m.type === 'pr'))
+      .map((s) => s.repo_id);
+    return ids.length > 0 ? ids : repos[0]?.id ? [repos[0].id] : [];
+  }, [branchStatus, repos]);
+
+  const currentWorkspaceSummary = activeWorkspaces.find(
+    (w) => w.id === workspaceId
+  );
+  const hasPrAttached = !!currentWorkspaceSummary?.prStatus;
+
+  const {
+    gitHubComments,
+    isGitHubCommentsLoading,
+    showGitHubComments,
+    setShowGitHubComments,
+    getGitHubCommentsForFile,
+    getGitHubCommentCountForFile,
+    getFilesWithGitHubComments,
+    getFirstCommentLineForFile,
+  } = useGitHubComments({
+    workspaceId,
+    repoIds: prRepoIds,
+    enabled: !isCreateMode && hasPrAttached,
+  });
+
+  const value = useMemo<WorkspaceGitHubContextValue>(
     () => ({
-      workspaceId,
-      workspace,
-      activeWorkspaces,
-      archivedWorkspaces,
-      isLoading,
-      isCreateMode,
-      selectWorkspace,
-      navigateToCreate,
-      sessions,
-      selectedSession,
-      selectedSessionId,
-      selectSession,
-      selectLatestSession,
-      isSessionsLoading,
-      isNewSessionMode,
-      startNewSession,
-      repos,
-      isReposLoading,
       gitHubComments,
       isGitHubCommentsLoading,
       showGitHubComments,
@@ -236,29 +365,8 @@ export function WorkspaceProvider({ children }: WorkspaceProviderProps) {
       getGitHubCommentCountForFile,
       getFilesWithGitHubComments,
       getFirstCommentLineForFile,
-      diffs,
-      diffPaths,
-      diffStats,
     }),
     [
-      workspaceId,
-      workspace,
-      activeWorkspaces,
-      archivedWorkspaces,
-      isLoading,
-      isCreateMode,
-      selectWorkspace,
-      navigateToCreate,
-      sessions,
-      selectedSession,
-      selectedSessionId,
-      selectSession,
-      selectLatestSession,
-      isSessionsLoading,
-      isNewSessionMode,
-      startNewSession,
-      repos,
-      isReposLoading,
       gitHubComments,
       isGitHubCommentsLoading,
       showGitHubComments,
@@ -267,25 +375,78 @@ export function WorkspaceProvider({ children }: WorkspaceProviderProps) {
       getGitHubCommentCountForFile,
       getFilesWithGitHubComments,
       getFirstCommentLineForFile,
-      diffs,
-      diffPaths,
-      diffStats,
     ]
   );
 
   return (
-    <WorkspaceContext.Provider value={value}>
+    <WorkspaceGitHubContext.Provider value={value}>
       {children}
-    </WorkspaceContext.Provider>
+    </WorkspaceGitHubContext.Provider>
   );
 }
 
-export function useWorkspaceContext(): WorkspaceContextValue {
-  const context = useContext(WorkspaceContext);
+export function useWorkspaceGitHubContext(): WorkspaceGitHubContextValue {
+  const context = useContext(WorkspaceGitHubContext);
   if (!context) {
     throw new Error(
-      'useWorkspaceContext must be used within a WorkspaceProvider'
+      'useWorkspaceGitHubContext must be used within a WorkspaceProvider'
     );
   }
   return context;
+}
+
+// ===========================================================================
+// Composite WorkspaceProvider
+//    Nests the four sub-providers in order. Innermost contexts have the
+//    highest update frequency; outermost are most stable.
+// ===========================================================================
+
+interface WorkspaceProviderProps {
+  children: ReactNode;
+}
+
+export function WorkspaceProvider({ children }: WorkspaceProviderProps) {
+  return (
+    <WorkspaceListProvider>
+      <WorkspaceSelectionProvider>
+        <WorkspaceDiffProvider>
+          <WorkspaceGitHubProvider>{children}</WorkspaceGitHubProvider>
+        </WorkspaceDiffProvider>
+      </WorkspaceSelectionProvider>
+    </WorkspaceListProvider>
+  );
+}
+
+// ===========================================================================
+// Legacy WorkspaceContext type + compatibility shim
+//    All 34 existing consumers continue to work without any change.
+//    The shim subscribes to all four contexts, so components that still use
+//    useWorkspaceContext() will re-render on any change — just like before.
+//    Migrate consumers to the specific hooks to gain the perf benefit.
+// ===========================================================================
+
+interface WorkspaceContextValue
+  extends WorkspaceSelectionContextValue,
+    WorkspaceListContextValue,
+    WorkspaceDiffContextValue,
+    WorkspaceGitHubContextValue {}
+
+/** @deprecated Use the specific sub-context hooks instead for better performance. */
+export const WorkspaceContext = createHmrContext<WorkspaceContextValue | null>(
+  'WorkspaceContext',
+  null
+);
+
+/** @deprecated Use useWorkspaceSelectionContext / useWorkspaceListContext /
+ *  useWorkspaceDiffContext / useWorkspaceGitHubContext for better performance. */
+export function useWorkspaceContext(): WorkspaceContextValue {
+  const selection = useWorkspaceSelectionContext();
+  const list = useWorkspaceListContext();
+  const diff = useWorkspaceDiffContext();
+  const github = useWorkspaceGitHubContext();
+  return useMemo(
+    () => ({ ...selection, ...list, ...diff, ...github }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selection, list, diff, github]
+  );
 }

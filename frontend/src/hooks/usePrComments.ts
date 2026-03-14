@@ -24,6 +24,8 @@ export function usePrComments(
     queryFn: () => attemptsApi.getPrComments(attemptId!, repoId!),
     enabled,
     staleTime: 30_000, // Cache for 30s - comments don't change frequently
+    gcTime: 60_000,
+    refetchOnMount: false,
     retry: 2,
   });
 }

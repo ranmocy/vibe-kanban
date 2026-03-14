@@ -23,7 +23,7 @@ import {
   CommandGroup,
   CommandItem,
 } from '@/components/ui-new/primitives/Command';
-import { useWorkspaceContext } from '@/contexts/WorkspaceContext';
+import { useWorkspaceListContext } from '@/contexts/WorkspaceContext';
 import {
   ProjectProvider,
   useProjectContext,
@@ -71,7 +71,7 @@ function WorkspaceSelectionContent({
   const previousFocusRef = useRef<HTMLElement | null>(null);
 
   // Get local workspaces from WorkspaceContext (both active and archived)
-  const { activeWorkspaces, archivedWorkspaces } = useWorkspaceContext();
+  const { activeWorkspaces, archivedWorkspaces } = useWorkspaceListContext();
 
   // Get already-linked workspaces from UserContext (workspaces are user-scoped)
   const { getWorkspacesForIssue, workspaces } = useUserContext();

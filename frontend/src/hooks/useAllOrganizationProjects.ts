@@ -44,8 +44,6 @@ export function useAllOrganizationProjects() {
 
   useEffect(() => {
     void fetchAll();
-    const interval = setInterval(() => void fetchAll(), 5000);
-    return () => clearInterval(interval);
   }, [fetchAll]);
 
   return { data: projects, isLoading };

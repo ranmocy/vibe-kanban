@@ -20,8 +20,10 @@ import { useAttempt } from '@/hooks/useAttempt';
 import { useRepoBranches } from '@/hooks/useRepoBranches';
 import { useAttemptRepo } from '@/hooks/useAttemptRepo';
 import { useBranchStatus } from '@/hooks/useBranchStatus';
-import { useWorkspaceContext } from '@/contexts/WorkspaceContext';
-import { useWorkspaces } from '@/components/ui-new/hooks/useWorkspaces';
+import {
+  useWorkspaceSelectionContext,
+  useWorkspaceListContext,
+} from '@/contexts/WorkspaceContext';
 import type { Result } from '@/lib/api';
 import { ResolveConflictsDialog } from './ResolveConflictsDialog';
 import { RebaseInProgressDialog } from './RebaseInProgressDialog';
@@ -47,10 +49,10 @@ function RebaseDialogContent({ attemptId, repoId }: RebaseDialogContentProps) {
 
   const git = useGitOperations(attemptId, repoId);
   const { data: workspace } = useAttempt(attemptId);
-  const { workspaceId: activeWorkspaceId } = useWorkspaceContext();
-  const { workspaces } = useWorkspaces();
+  const { workspaceId: activeWorkspaceId } = useWorkspaceSelectionContext();
+  const { activeWorkspaces } = useWorkspaceListContext();
   const isWorkspaceRunning =
-    workspaces.find((w) => w.id === attemptId)?.isRunning ?? false;
+    activeWorkspaces.find((w) => w.id === attemptId)?.isRunning ?? false;
 
   // Load branches and repo data internally
   const { data: branches = [], isLoading: branchesLoading } =

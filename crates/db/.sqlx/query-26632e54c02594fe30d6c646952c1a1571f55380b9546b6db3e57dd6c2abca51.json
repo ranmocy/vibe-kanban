@@ -1,0 +1,80 @@
+{
+  "db_name": "SQLite",
+  "query": "WITH task_workspaces AS (\n    SELECT\n        w.task_id,\n        ep.status,\n        s.executor,\n        ep.created_at,\n        ROW_NUMBER() OVER (\n            PARTITION BY w.task_id\n            ORDER BY ep.created_at DESC\n        ) AS rn\n    FROM workspaces w\n    JOIN sessions s ON s.workspace_id = w.id\n    JOIN execution_processes ep ON ep.session_id = s.id\n    WHERE ep.run_reason IN ('setupscript', 'cleanupscript', 'codingagent')\n      AND ep.dropped = FALSE\n),\ntask_status AS (\n    SELECT\n        task_id,\n        MAX(CASE WHEN status = 'running' THEN 1 ELSE 0 END)           AS has_in_progress_attempt,\n        MAX(CASE WHEN rn = 1 AND status IN ('failed','killed')\n                 THEN 1 ELSE 0 END)                                    AS last_attempt_failed,\n        MAX(CASE WHEN rn = 1 THEN executor ELSE NULL END)              AS executor\n    FROM task_workspaces\n    GROUP BY task_id\n)\nSELECT\n  t.id                            AS \"id!: Uuid\",\n  t.project_id                    AS \"project_id!: Uuid\",\n  t.title,\n  t.description,\n  t.status                        AS \"status!: TaskStatus\",\n  t.parent_workspace_id           AS \"parent_workspace_id: Uuid\",\n  t.created_at                    AS \"created_at!: DateTime<Utc>\",\n  t.updated_at                    AS \"updated_at!: DateTime<Utc>\",\n  COALESCE(ts.has_in_progress_attempt, 0) AS \"has_in_progress_attempt!: i64\",\n  COALESCE(ts.last_attempt_failed, 0)     AS \"last_attempt_failed!: i64\",\n  COALESCE(ts.executor, '')               AS \"executor!: String\"\nFROM tasks t\nLEFT JOIN task_status ts ON ts.task_id = t.id\nWHERE t.project_id = $1\nORDER BY t.created_at DESC",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: Uuid",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "project_id!: Uuid",
+        "ordinal": 1,
+        "type_info": "Blob"
+      },
+      {
+        "name": "title",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "description",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "status!: TaskStatus",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "parent_workspace_id: Uuid",
+        "ordinal": 5,
+        "type_info": "Blob"
+      },
+      {
+        "name": "created_at!: DateTime<Utc>",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "updated_at!: DateTime<Utc>",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "has_in_progress_attempt!: i64",
+        "ordinal": 8,
+        "type_info": "Null"
+      },
+      {
+        "name": "last_attempt_failed!: i64",
+        "ordinal": 9,
+        "type_info": "Null"
+      },
+      {
+        "name": "executor!: String",
+        "ordinal": 10,
+        "type_info": "Null"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      true,
+      false,
+      true,
+      false,
+      false,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "26632e54c02594fe30d6c646952c1a1571f55380b9546b6db3e57dd6c2abca51"
+}

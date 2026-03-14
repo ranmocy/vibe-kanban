@@ -1,10 +1,10 @@
 import { useEffect, useRef } from 'react';
-import { useWorkspaceContext } from '@/contexts/WorkspaceContext';
+import { useWorkspaceSelectionContext } from '@/contexts/WorkspaceContext';
 import { useTerminal } from '@/contexts/TerminalContext';
 import { TerminalPanel } from '../views/TerminalPanel';
 
 export function TerminalPanelContainer() {
-  const { workspace } = useWorkspaceContext();
+  const { workspace } = useWorkspaceSelectionContext();
   const {
     getTabsForWorkspace,
     getActiveTab,

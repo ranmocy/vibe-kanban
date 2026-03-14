@@ -27,7 +27,7 @@ import {
   useIgnoreWhitespaceDiff,
 } from '@/stores/useDiffViewStore';
 import { useReview, type ReviewDraft } from '@/contexts/ReviewProvider';
-import { useWorkspaceContext } from '@/contexts/WorkspaceContext';
+import { useWorkspaceGitHubContext } from '@/contexts/WorkspaceContext';
 import { getFileIcon } from '@/utils/fileTypeIcon';
 import { OpenInIdeButton } from '@/components/ide/OpenInIdeButton';
 import { useOpenInEditor } from '@/hooks/useOpenInEditor';
@@ -225,7 +225,7 @@ export function PierreDiffCard({
 
   const { comments, drafts, setDraft, addComment } = useReview();
   const { showGitHubComments, getGitHubCommentsForFile } =
-    useWorkspaceContext();
+    useWorkspaceGitHubContext();
 
   // Range selection state
   const [rangeAnchor, setRangeAnchor] = useState<{

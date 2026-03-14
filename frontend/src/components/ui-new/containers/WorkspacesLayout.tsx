@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { Group, Layout, Panel, Separator } from 'react-resizable-panels';
-import { useWorkspaceContext } from '@/contexts/WorkspaceContext';
+import { useWorkspaceSelectionContext } from '@/contexts/WorkspaceContext';
 import { ExecutionProcessesProvider } from '@/contexts/ExecutionProcessesContext';
 import { CreateModeProvider } from '@/contexts/CreateModeContext';
 import { ReviewProvider } from '@/contexts/ReviewProvider';
@@ -28,7 +28,7 @@ import {
 
 const WORKSPACES_GUIDE_ID = 'workspaces-guide';
 
-export function WorkspacesLayout() {
+export const WorkspacesLayout = React.memo(function WorkspacesLayout() {
   const {
     workspaceId,
     workspace: selectedWorkspace,
@@ -41,7 +41,7 @@ export function WorkspacesLayout() {
     repos,
     isNewSessionMode,
     startNewSession,
-  } = useWorkspaceContext();
+  } = useWorkspaceSelectionContext();
 
   const mainContainerRef = useRef<WorkspacesMainContainerHandle>(null);
 
@@ -219,4 +219,4 @@ export function WorkspacesLayout() {
       </div>
     </div>
   );
-}
+});

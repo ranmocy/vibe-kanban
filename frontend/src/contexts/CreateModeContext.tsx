@@ -6,7 +6,7 @@ import {
   useCreateModeState,
   type CreateModeInitialState,
 } from '@/hooks/useCreateModeState';
-import { useWorkspaces } from '@/components/ui-new/hooks/useWorkspaces';
+import { useWorkspaceListContext } from '@/contexts/WorkspaceContext';
 import { useTask } from '@/hooks/useTask';
 import { useAttemptRepo } from '@/hooks/useAttemptRepo';
 import { repoApi } from '@/lib/api';
@@ -53,13 +53,14 @@ interface CreateModeProviderProps {
   draftId?: string | null;
 }
 
+// NOTE: This provider must be rendered inside WorkspaceProvider (uses useWorkspaceContext)
 export function CreateModeProvider({
   children,
   initialState,
   draftId,
 }: CreateModeProviderProps) {
   // Fetch most recent workspace to use as initial values
-  const { workspaces: activeWorkspaces, archivedWorkspaces } = useWorkspaces();
+  const { activeWorkspaces, archivedWorkspaces } = useWorkspaceListContext();
   const mostRecentWorkspace = activeWorkspaces[0] ?? archivedWorkspaces[0];
 
   const { data: lastWorkspaceTask } = useTask(mostRecentWorkspace?.taskId, {

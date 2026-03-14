@@ -38,6 +38,17 @@ impl OriginKey {
 
 #[allow(clippy::result_large_err)]
 pub fn validate_origin<B>(req: &mut Request<B>) -> Result<(), Response> {
+    // WebSocket upgrade requests: the browser enforces same-origin via
+    // Sec-WebSocket-Key; the Vite proxy rewrites Host, so skip origin check
+    if req
+        .headers()
+        .get(header::UPGRADE)
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|v| v.eq_ignore_ascii_case("websocket"))
+    {
+        return Ok(());
+    }
+
     let Some(origin) = get_origin_header(req) else {
         return Ok(());
     };
@@ -71,6 +82,11 @@ pub fn validate_origin<B>(req: &mut Request<B>) -> Result<(), Response> {
         return Ok(());
     }
 
+    tracing::debug!(
+        origin = ?origin,
+        host = ?host,
+        "Origin validation failed: origin does not match host or allowed list"
+    );
     Err(forbidden())
 }
 

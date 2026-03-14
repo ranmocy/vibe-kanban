@@ -19,7 +19,7 @@ import {
 } from '@/hooks/usePreviewSettings';
 import { useLogStream } from '@/hooks/useLogStream';
 import { useUiPreferencesStore } from '@/stores/useUiPreferencesStore';
-import { useWorkspaceContext } from '@/contexts/WorkspaceContext';
+import { useWorkspaceSelectionContext } from '@/contexts/WorkspaceContext';
 import { ScriptFixerDialog } from '@/components/dialogs/scripts/ScriptFixerDialog';
 
 const MIN_RESPONSIVE_WIDTH = 320;
@@ -38,7 +38,7 @@ export function PreviewBrowserContainer({
   const triggerPreviewRefresh = useUiPreferencesStore(
     (s) => s.triggerPreviewRefresh
   );
-  const { repos, workspaceId } = useWorkspaceContext();
+  const { repos, workspaceId } = useWorkspaceSelectionContext();
 
   const {
     start,

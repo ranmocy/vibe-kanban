@@ -2,13 +2,14 @@
 
 mod cli;
 
-use std::{path::Path, time::Duration};
+use std::{path::Path, sync::Arc, sync::LazyLock, time::Duration};
 
 use async_trait::async_trait;
 use backon::{ExponentialBuilder, Retryable};
 pub use cli::GhCli;
 use cli::{GhCliError, GitHubRepoInfo};
 use db::models::merge::PullRequestInfo;
+use moka::future::Cache;
 use tokio::task;
 use tracing::info;
 
@@ -16,6 +17,18 @@ use super::{
     GitHostProvider,
     types::{CreatePrRequest, GitHostError, OpenPrInfo, ProviderKind, UnifiedPrComment},
 };
+
+type PrCommentsCache = Cache<(String, i64), Arc<Vec<UnifiedPrComment>>>;
+
+/// Process-wide cache shared across all requests. moka::future::Cache is
+/// Clone + Send + Sync and internally reference-counted, so a static works
+/// perfectly here.
+static PR_COMMENTS_CACHE: LazyLock<PrCommentsCache> = LazyLock::new(|| {
+    Cache::builder()
+        .max_capacity(256)
+        .time_to_live(Duration::from_secs(300))
+        .build()
+});
 
 #[derive(Debug, Clone)]
 pub struct GitHubProvider {
@@ -27,6 +40,15 @@ impl GitHubProvider {
         Ok(Self {
             gh_cli: GhCli::new(),
         })
+    }
+
+    pub fn invalidate_pr_comments(&self, repo_path: &Path, pr_number: i64) {
+        let key = (repo_path.to_string_lossy().into_owned(), pr_number);
+        // moka's invalidate is synchronous for the removal scheduling; fire-and-forget is fine here
+        let cache = PR_COMMENTS_CACHE.clone();
+        tokio::spawn(async move {
+            cache.invalidate(&key).await;
+        });
     }
 
     async fn get_repo_info(
@@ -299,6 +321,13 @@ impl GitHostProvider for GitHubProvider {
         remote_url: &str,
         pr_number: i64,
     ) -> Result<Vec<UnifiedPrComment>, GitHostError> {
+        let cache_key = (repo_path.to_string_lossy().into_owned(), pr_number);
+
+        if let Some(cached) = PR_COMMENTS_CACHE.get(&cache_key).await {
+            tracing::debug!("PR comments cache hit for PR #{}", pr_number);
+            return Ok((*cached).clone());
+        }
+
         let repo_info = self.get_repo_info(remote_url, repo_path).await?;
 
         // Fetch both types of comments in parallel
@@ -345,7 +374,11 @@ impl GitHostProvider for GitHubProvider {
         // Sort by creation time
         unified.sort_by_key(|c| c.created_at());
 
-        Ok(unified)
+        let result = Arc::new(unified);
+        PR_COMMENTS_CACHE
+            .insert(cache_key, Arc::clone(&result))
+            .await;
+        Ok((*result).clone())
     }
 
     async fn list_open_prs(

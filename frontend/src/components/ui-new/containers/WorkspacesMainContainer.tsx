@@ -12,7 +12,7 @@ import {
   type ConversationListHandle,
 } from '@/components/ui-new/views/WorkspacesMain';
 import { useTask } from '@/hooks/useTask';
-import { useWorkspaceContext } from '@/contexts/WorkspaceContext';
+import { useWorkspaceDiffContext } from '@/contexts/WorkspaceContext';
 
 export interface WorkspacesMainContainerHandle {
   scrollToBottom: () => void;
@@ -45,7 +45,7 @@ export const WorkspacesMainContainer = forwardRef<
   },
   ref
 ) {
-  const { diffStats } = useWorkspaceContext();
+  const { diffStats } = useWorkspaceDiffContext();
   const containerRef = useRef<HTMLElement>(null);
   const conversationListRef = useRef<ConversationListHandle>(null);
 

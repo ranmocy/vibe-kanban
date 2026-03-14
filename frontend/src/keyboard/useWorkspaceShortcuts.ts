@@ -1,7 +1,7 @@
 import { useCallback, useRef, useEffect } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { useActions } from '@/contexts/ActionsContext';
-import { useWorkspaceContext } from '@/contexts/WorkspaceContext';
+import { useWorkspaceSelectionContext } from '@/contexts/WorkspaceContext';
 import {
   Actions,
   type ActionDefinition,
@@ -18,7 +18,7 @@ const OPTIONS = {
 
 export function useWorkspaceShortcuts() {
   const { executeAction } = useActions();
-  const { workspaceId, repos } = useWorkspaceContext();
+  const { workspaceId, repos } = useWorkspaceSelectionContext();
 
   const workspaceIdRef = useRef(workspaceId);
   const reposRef = useRef(repos);
